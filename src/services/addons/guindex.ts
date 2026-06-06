@@ -55,8 +55,12 @@ export function configureGuIndex(
 
     addon.transportUrl = buildGuIndexUrl(servicePath, debrid.key);
     addon.manifest = addon.manifest || {};
-    addon.manifest.name =
-      (addon.manifest.name || 'GuIndex') + ` | ${serviceName}`;
+    const baseName =
+      typeof addon.manifest.name === 'string' &&
+      addon.manifest.name.toLowerCase().includes('guindex')
+        ? 'GuIndex BR'
+        : addon.manifest.name || 'GuIndex BR';
+    addon.manifest.name = `${baseName} | ${serviceName}`;
 
     if (shouldClone) {
       rebuilt[name] = addon;

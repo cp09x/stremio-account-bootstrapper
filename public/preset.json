@@ -42,9 +42,13 @@
       "cinemeta",
       "aiometadata",
       "aiostreams",
+      "torrentio_br",
       "torrentsdb",
       "streailer",
-      "opensubtitlespro"
+      "opensubtitlespro",
+      "opensubtitlesv2",
+      "opensubtitlesv3",
+      "subherov2"
     ],
     "http_only": [
       "cinemeta",
@@ -210,6 +214,26 @@
         "flags": {
           "official": false,
           "protected": false
+        }
+      },
+      "torrentio_br": {
+        "transportUrl": "https://torrentio.strem.fun/providers=comando,bludv,micoleaodublado|language=portuguese|qualityfilter=threed,{{it.no4k}}scr,cam,unknown,576p,480p,360p,240p,144p{{it.maxSize}}|limit={{it.limit}}{{it.transportUrl}}/manifest.json",
+        "transportName": "",
+        "manifest": {
+          "id": "com.stremio.torrentio.addon.br",
+          "version": "0.0.15",
+          "name": "Torrentio BR",
+          "description": "Brazilian Portuguese Torrentio fallback using Comando, BluDV, and MicoLeaoDublado providers.",
+          "logo": "https://torrentio.strem.fun/images/logo_v1.png",
+          "background": "https://torrentio.strem.fun/images/background_v1.jpg",
+          "resources": [
+            {
+              "name": "stream",
+              "types": ["movie", "series"],
+              "idPrefixes": ["tt"]
+            }
+          ],
+          "types": ["movie", "series"]
         }
       },
       "comet": {
@@ -820,7 +844,7 @@
         }
       },
       "opensubtitlespro": {
-        "transportUrl": "https://opensubtitlesv3-pro.dexter21767.com/eyJsYW5ncyI6WyJlbmdsaXNoIl0sInNvdXJjZSI6ImFsbCIsImFpVHJhbnNsYXRlZCI6dHJ1ZSwiYXV0b0FkanVzdG1lbnQiOnRydWV9/manifest.json",
+        "transportUrl": "https://opensubtitlesv3-pro.dexter21767.com/eyJsYW5ncyI6WyJlbmdsaXNoIiwicG9ydHVndWVzZS1iciJdLCJzb3VyY2UiOiJhbGwiLCJhaVRyYW5zbGF0ZWQiOnRydWUsImF1dG9BZGp1c3RtZW50Ijp0cnVlfQ==/manifest.json",
         "transportName": "",
         "manifest": {
           "id": "community.opensubtitlesv3.pro",
@@ -854,6 +878,34 @@
           "types": ["movie", "series"],
           "resources": ["subtitles"],
           "idPrefixes": ["tt"],
+          "catalogs": [],
+          "addonCatalogs": [],
+          "behaviorHints": {
+            "adult": false,
+            "p2p": false,
+            "configurable": false,
+            "configurationRequired": false
+          }
+        },
+        "flags": {
+          "official": true,
+          "protected": false
+        }
+      },
+      "opensubtitlesv2": {
+        "transportUrl": "https://subtitlesv2.strem.io/manifest.json",
+        "transportName": "",
+        "manifest": {
+          "id": "community.opensubtitlesv2",
+          "version": "0.2.0",
+          "name": "stremio-opensubtitlesv2",
+          "contactEmail": null,
+          "description": "Official OpenSubtitles addon for Stremio",
+          "logo": "http://www.strem.io/images/addons/opensubtitles-logo.png",
+          "background": null,
+          "types": ["movie", "series", "other"],
+          "resources": ["subtitles"],
+          "idPrefixes": ["tt", "bt:", "file:"],
           "catalogs": [],
           "addonCatalogs": [],
           "behaviorHints": {

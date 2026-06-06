@@ -3,16 +3,12 @@ import { convertToMegabytes } from '../../utils/sizeConverters';
 import type { AddonConfigContext } from './types';
 import {
   appendUniqueFilters,
+  applyManifestContentPreferences,
   getTorrentioQualityFilters
 } from '../../utils/streamPreferences';
 
 const ANIME_PROVIDERS = new Set(['nyaa', 'animetosho', 'tokyotosho']);
-const STRICT_MIN_720_PROVIDERS = new Set([
-  'yts',
-  'eztv',
-  'torrentgalaxy',
-  'limetorrent'
-]);
+const LOW_CONFIDENCE_PROVIDERS = new Set(['manual']);
 const TORRENTSDB_DEBRID_OPTIONS = ['nocatalog'];
 const NO_4K_QUALITY_FILTERS = [
   '4k',
@@ -51,10 +47,7 @@ function normalizeQualityFilters(existingFilters: unknown): string[] {
 
 function getProviders(
   providers: unknown,
-  {
-    minQuality,
-    excludeAnime
-  }: Pick<AddonConfigContext, 'minQuality' | 'excludeAnime'>
+  { excludeAnime }: Pick<AddonConfigContext, 'excludeAnime'>
 ): string[] | undefined {
   if (!Array.isArray(providers)) return undefined;
 
@@ -62,15 +55,11 @@ function getProviders(
     (provider): provider is string => typeof provider === 'string'
   );
 
-  if (minQuality === '720p') {
-    nextProviders = nextProviders.filter((provider) =>
-      STRICT_MIN_720_PROVIDERS.has(provider.trim().toLowerCase())
-    );
-  }
-
   if (excludeAnime) {
     nextProviders = nextProviders.filter(
-      (provider: string) => !ANIME_PROVIDERS.has(provider.trim().toLowerCase())
+      (provider: string) =>
+        !ANIME_PROVIDERS.has(provider.trim().toLowerCase()) &&
+        !LOW_CONFIDENCE_PROVIDERS.has(provider.trim().toLowerCase())
     );
   }
 
@@ -114,7 +103,6 @@ export function configureTorrentsDB(
     manifestNameSuffix: debridServiceName,
     updateData: (data: any) => {
       const providers = getProviders(data.providers, {
-        minQuality,
         excludeAnime
       });
 
@@ -131,5 +119,9 @@ export function configureTorrentsDB(
         ...(providers ? { providers } : {})
       };
     }
+  });
+
+  applyManifestContentPreferences(presetConfig.torrentsdb.manifest, {
+    excludeAnime
   });
 }

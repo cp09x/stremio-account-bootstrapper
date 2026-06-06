@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyManifestContentPreferences,
+  applyStreamAndSubtitleManifest,
   applyStreamOnlyManifest,
   applyTorrentioPreferences,
   filterResolutionsByMinQuality,
@@ -91,6 +92,30 @@ describe('stream preferences', () => {
 
     expect(manifest).toEqual({
       resources: [{ name: 'stream', types: ['movie', 'series'] }],
+      catalogs: [],
+      addonCatalogs: []
+    });
+  });
+
+  it('keeps stream and subtitle resources while removing aggregator catalogs', () => {
+    const manifest = {
+      resources: [
+        'catalog',
+        'meta',
+        { name: 'stream', types: ['movie', 'series'] },
+        { name: 'subtitles', types: ['movie', 'series'] }
+      ],
+      catalogs: [{ type: 'movie', id: 'search', name: 'Search' }],
+      addonCatalogs: [{ type: 'movie', id: 'community', name: 'Community' }]
+    };
+
+    applyStreamAndSubtitleManifest(manifest);
+
+    expect(manifest).toEqual({
+      resources: [
+        { name: 'stream', types: ['movie', 'series'] },
+        { name: 'subtitles', types: ['movie', 'series'] }
+      ],
       catalogs: [],
       addonCatalogs: []
     });

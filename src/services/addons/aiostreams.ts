@@ -8,6 +8,7 @@ import { convertToBytes } from '../../utils/sizeConverters';
 import _ from 'lodash';
 import { applyTemplateConditionals } from '../../utils/templateConditionals';
 import {
+  applyManifestContentPreferences,
   applyStreamOnlyManifest,
   getExcludedResolutions
 } from '../../utils/streamPreferences';
@@ -192,10 +193,33 @@ export async function configureAioStreams(
   }));
 
   // Add parent language when selected language is es-MX or pt-BR
+  const primaryLanguage =
+    language === 'pt-BR' ? 'Portuguese (Brazil)' : getLanguageName(language);
   const templateLanguages = [
-    language === 'pt-BR' ? 'Portuguese (Brazil)' : getLanguageName(language),
+    primaryLanguage,
+    ...(language === 'en' ? ['Portuguese (Brazil)', 'Portuguese'] : []),
     ...(language === 'es-MX' ? ['Spanish'] : []),
     ...(language === 'pt-BR' ? ['Portuguese'] : [])
+  ];
+  const languagePassthrough = {
+    language: primaryLanguage,
+    languageAmount: 10,
+    languagePin: language !== 'en' ? true : false,
+    subLanguage: primaryLanguage,
+    subLanguageAmount: 10,
+    subLanguagePin: false
+  };
+  const miscPassthrough = {
+    overallTopQualRes: 12
+  };
+  const deviceExclude = [
+    ...(no4k ? ['4k'] : []),
+    'av1',
+    'trueHD',
+    'dts',
+    'DVonly',
+    'dvOnlyNonRemux',
+    'DVP7'
   ];
 
   // Process template
@@ -207,12 +231,11 @@ export async function configureAioStreams(
       includeAddon: {
         subtitleLanguages: ['disabled']
       },
-      LanguagePassthrough: {
-        language: getLanguageName(language),
-        languagePin: language !== 'en' ? true : false
-      },
+      LanguagePassthrough: languagePassthrough,
+      coreFilter: 'extended',
+      miscPassthrough,
       torboxTier: 'nonPro',
-      ...(no4k ? { deviceExclude: ['4k'] } : {})
+      deviceExclude
     },
     debridServices.map((svc) => svc.id)
   );
@@ -226,8 +249,10 @@ export async function configureAioStreams(
   template.config.presets = template.config.presets.filter(
     (preset: any) => preset.type !== 'webstreamr'
   );
-  const webstreamrConfig = getWebStreamrConfig(language);
-  template.config.presets.push(webstreamrConfig);
+  if (!cached) {
+    const webstreamrConfig = getWebStreamrConfig(language);
+    template.config.presets.push(webstreamrConfig);
+  }
 
   if (excludeAnime) {
     restrictPresetMediaTypes(template.config.presets);
@@ -236,6 +261,12 @@ export async function configureAioStreams(
   // Build config overrides
   const configOverrides = {
     services: debridServices,
+    languages: templateLanguages,
+    subtitles: templateLanguages,
+    LanguagePassthrough: languagePassthrough,
+    coreFilter: 'extended',
+    miscPassthrough,
+    deviceExclude,
     excludedResolutions: getExcludedResolutions(minQuality),
     ...(size && {
       size: {
@@ -272,6 +303,9 @@ export async function configureAioStreams(
       presetConfig.aiostreams.manifest.name =
         'AIOStreams' + (debridServiceName ? ` | ${debridServiceName}` : '');
       applyStreamOnlyManifest(presetConfig.aiostreams.manifest);
+      applyManifestContentPreferences(presetConfig.aiostreams.manifest, {
+        excludeAnime
+      });
       presetConfig.aiostreams.transportUrl = aioStreamsData.transportUrl;
     } else {
       delete presetConfig.aiostreams;

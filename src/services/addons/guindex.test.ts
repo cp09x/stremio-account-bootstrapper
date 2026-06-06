@@ -50,12 +50,14 @@ describe('configureGuIndex', () => {
       `realdebrid/${'A'.repeat(52)}/manifest.json`
     );
     expect(result.rebuilt?.guindex_realdebrid.manifest.name).toBe(
-      'GuIndex | RD'
+      'GuIndex BR | RD'
     );
     expect(result.rebuilt?.guindex_torbox.transportUrl).toContain(
       'torbox/123e4567-e89b-12d3-a456-426614174000/manifest.json'
     );
-    expect(result.rebuilt?.guindex_torbox.manifest.name).toBe('GuIndex | TB');
+    expect(result.rebuilt?.guindex_torbox.manifest.name).toBe(
+      'GuIndex BR | TB'
+    );
   });
 
   it('removes GuIndex without Real-Debrid or TorBox credentials', () => {
@@ -70,7 +72,7 @@ describe('configureGuIndex', () => {
     expect(presetConfig.guindex).toBeUndefined();
   });
 
-  it('removes GuIndex when strict stream filters cannot be enforced', () => {
+  it('removes GuIndex when strict stream filters are requested', () => {
     const presetConfig = createPreset();
 
     const result = configureGuIndex(

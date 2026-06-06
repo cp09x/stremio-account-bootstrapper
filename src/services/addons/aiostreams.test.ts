@@ -27,7 +27,14 @@ const createTemplate = () => ({
     inputs: []
   },
   config: {
-    presets: [],
+    presets: [
+      {
+        type: 'opensubtitles-v3-plus',
+        options: {
+          language: '{{inputs.includeAddon.subtitleLanguages}}'
+        }
+      }
+    ],
     titleMatching: { enabled: true },
     yearMatching: { enabled: true },
     bitrate: { useMetadataRuntime: true }
@@ -46,7 +53,8 @@ describe('configureAioStreams', () => {
           name: 'AIOStreams',
           resources: [
             'catalog',
-            { name: 'stream', types: ['movie', 'series'] }
+            { name: 'stream', types: ['movie', 'series'] },
+            { name: 'subtitles', types: ['movie', 'series'] }
           ],
           catalogs: [{ type: 'movie', id: 'search', name: 'Search' }]
         }
@@ -83,6 +91,46 @@ describe('configureAioStreams', () => {
     });
     expect(mocks.submittedConfig.config.excludeUncached).toBe(true);
     expect(mocks.submittedConfig.config.excludedResolutions).toContain('576p');
+    expect(mocks.submittedConfig.config.coreFilter).toBe('extended');
+    expect(mocks.submittedConfig.config.miscPassthrough).toMatchObject({
+      overallTopQualRes: 12
+    });
+    expect(mocks.submittedConfig.config.deviceExclude).toEqual([
+      'av1',
+      'trueHD',
+      'dts',
+      'DVonly',
+      'dvOnlyNonRemux',
+      'DVP7'
+    ]);
+    expect(mocks.submittedConfig.config.languages).toEqual([
+      'English',
+      'Portuguese (Brazil)',
+      'Portuguese'
+    ]);
+    expect(mocks.submittedConfig.config.LanguagePassthrough).toMatchObject({
+      language: 'English',
+      languageAmount: 10,
+      subLanguage: 'English',
+      subLanguageAmount: 10
+    });
+    expect(mocks.submittedConfig.config.presets).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'opensubtitles-v3-plus',
+          options: expect.objectContaining({
+            language: ['disabled']
+          })
+        })
+      ])
+    );
+    expect(mocks.submittedConfig.config.presets).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'webstreamr'
+        })
+      ])
+    );
     expect(presetConfig.aiostreams.manifest.name).toBe('AIOStreams | RD');
     expect(presetConfig.aiostreams.manifest.resources).toEqual([
       { name: 'stream', types: ['movie', 'series'] }

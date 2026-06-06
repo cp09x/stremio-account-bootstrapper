@@ -238,6 +238,22 @@ export async function buildPresetService(params: BuildPresetServiceParams) {
     );
   }
 
+  // Narrow Brazilian Torrentio fallback. Keep this separate from generic
+  // Torrentio so Portuguese providers do not pollute title matching globally.
+  const torrentioBrResult = configureTorrentio(
+    presetConfig,
+    context,
+    Sqrl,
+    'torrentio_br'
+  );
+  if (torrentioBrResult.shouldReplace && torrentioBrResult.rebuilt) {
+    presetConfig = replaceAddonKey(
+      presetConfig,
+      'torrentio_br',
+      torrentioBrResult.rebuilt
+    );
+  }
+
   // MediaFusion
   try {
     const mediaFusionResult = await configureMediaFusion(

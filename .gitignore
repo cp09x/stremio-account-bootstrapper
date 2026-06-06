@@ -17,6 +17,7 @@ dist-ssr
 stremio-current-addons*.json
 stremio-plugins-keys*.md
 *.private.json
+stremio-account-backups/
 
 # Editor directories and files
 .vscode/*

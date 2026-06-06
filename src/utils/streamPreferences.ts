@@ -202,3 +202,25 @@ export function applyStreamOnlyManifest(manifest: any): void {
     manifest.addonCatalogs = [];
   }
 }
+
+export function applyStreamAndSubtitleManifest(manifest: any): void {
+  if (!manifest) return;
+
+  if (Array.isArray(manifest.resources)) {
+    manifest.resources = manifest.resources.filter((resource: any) => {
+      if (typeof resource === 'string') {
+        return resource === 'stream' || resource === 'subtitles';
+      }
+
+      return resource?.name === 'stream' || resource?.name === 'subtitles';
+    });
+  }
+
+  if (Array.isArray(manifest.catalogs)) {
+    manifest.catalogs = [];
+  }
+
+  if (Array.isArray(manifest.addonCatalogs)) {
+    manifest.addonCatalogs = [];
+  }
+}

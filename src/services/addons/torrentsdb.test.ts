@@ -5,9 +5,18 @@ import { configureTorrentsDB } from './torrentsdb';
 const createPreset = () => ({
   torrentsdb: {
     transportUrl:
-      'https://torrentsdb.com/eyJwcm92aWRlcnMiOlsieXRzIiwibnlhYSIsImFuaW1ldG9zaG8iXSwicXVhbGl0eWZpbHRlciI6WyJzY3IiLCJjYW0iLCJ1bmtub3duIl0sImxpbWl0IjoiMTAifQ==/manifest.json',
+      'https://torrentsdb.com/eyJwcm92aWRlcnMiOlsieXRzIiwiZXp0diIsIjEzMzd4IiwidG9ycmVudGNzdiIsIm55YWEiLCJsaW1ldG9ycmVudCIsInJhcmdiIiwia25hYmVuIiwidGhlcGlyYXRlYmF5Iiwia2lja2Fzc3RvcnJlbnRzIiwiYW5pbWV0b3NobyIsInRva3lvdG9zaG8iLCJtYW51YWwiXSwicXVhbGl0eWZpbHRlciI6WyJzY3IiLCJjYW0iLCJ1bmtub3duIl0sImxpbWl0IjoiMTAifQ==/manifest.json',
     manifest: {
-      name: 'TorrentsDB'
+      name: 'TorrentsDB',
+      types: ['movie', 'series', 'anime', 'other'],
+      resources: [
+        { name: 'stream', types: ['movie', 'series', 'anime'] },
+        { name: 'catalog', types: ['anime'] }
+      ],
+      catalogs: [
+        { type: 'movie', id: 'top', name: 'Top' },
+        { type: 'anime', id: 'anime', name: 'Anime' }
+      ]
     }
   }
 });
@@ -46,6 +55,31 @@ describe('configureTorrentsDB', () => {
       '240p',
       '144p'
     ]);
-    expect(decoded.providers).toEqual(['yts']);
+    expect(decoded.providers).toEqual([
+      'yts',
+      'eztv',
+      '1337x',
+      'torrentcsv',
+      'limetorrent',
+      'rargb',
+      'knaben',
+      'thepiratebay',
+      'kickasstorrents'
+    ]);
+    expect(decoded.providers).not.toContain('nyaa');
+    expect(decoded.providers).not.toContain('animetosho');
+    expect(decoded.providers).not.toContain('tokyotosho');
+    expect(decoded.providers).not.toContain('manual');
+    expect(presetConfig.torrentsdb.manifest.types).toEqual([
+      'movie',
+      'series',
+      'other'
+    ]);
+    expect(presetConfig.torrentsdb.manifest.resources).toEqual([
+      { name: 'stream', types: ['movie', 'series'] }
+    ]);
+    expect(presetConfig.torrentsdb.manifest.catalogs).toEqual([
+      { type: 'movie', id: 'top', name: 'Top' }
+    ]);
   });
 });
