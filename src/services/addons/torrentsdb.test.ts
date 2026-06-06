@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Buffer } from 'buffer';
+import { decodeDataFromTransportUrl } from '../../utils/transportUrl';
 import { configureTorrentsDB } from './torrentsdb';
 
 const createPreset = () => ({
@@ -29,17 +29,23 @@ describe('configureTorrentsDB', () => {
       excludeAnime: true
     });
 
-    const decoded = Buffer.from(
-      presetConfig.torrentsdb.transportUrl.split('/')[3]!,
-      'base64'
-    ).toString('utf-8');
+    const decoded = decodeDataFromTransportUrl(
+      presetConfig.torrentsdb.transportUrl.split('/')[3]!
+    ) as any;
 
-    expect(decoded).toContain(
-      '"debridoptions":["nodownloadlinks","nocatalog"]'
-    );
-    expect(decoded).toContain(`"realdebrid":"${'A'.repeat(52)}"`);
-    expect(decoded).toContain('"sort":"qualitysize"');
-    expect(decoded).not.toContain('nyaa');
-    expect(decoded).not.toContain('animetosho');
+    expect(decoded.debridoptions).toEqual(['nodownloadlinks', 'nocatalog']);
+    expect(decoded.realdebrid).toBe('A'.repeat(52));
+    expect(decoded.sort).toBe('qualitysize');
+    expect(decoded.qualityfilter).toEqual([
+      'scr',
+      'cam',
+      'unknown',
+      '576p',
+      '480p',
+      '360p',
+      '240p',
+      '144p'
+    ]);
+    expect(decoded.providers).toEqual(['yts']);
   });
 });

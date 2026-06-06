@@ -7,7 +7,20 @@ import {
 } from '../../utils/streamPreferences';
 
 const ANIME_PROVIDERS = new Set(['nyaa', 'animetosho', 'tokyotosho']);
+const STRICT_MIN_720_PROVIDERS = new Set([
+  'yts',
+  'eztv',
+  'torrentgalaxy',
+  'limetorrent'
+]);
 const TORRENTSDB_DEBRID_OPTIONS = ['nocatalog'];
+const NO_4K_QUALITY_FILTERS = [
+  '4k',
+  'brremux',
+  'hdrall',
+  'dolbyvisionwithhdr',
+  'dolbyvision'
+];
 
 function getDebridOptions(cached: boolean, existingOptions: unknown): string[] {
   const normalizedOptions = Array.isArray(existingOptions)
@@ -20,6 +33,48 @@ function getDebridOptions(cached: boolean, existingOptions: unknown): string[] {
     : TORRENTSDB_DEBRID_OPTIONS;
 
   return Array.from(new Set([...normalizedOptions, ...requiredOptions]));
+}
+
+function normalizeQualityFilters(existingFilters: unknown): string[] {
+  if (Array.isArray(existingFilters)) {
+    return existingFilters.filter(
+      (filter): filter is string => typeof filter === 'string'
+    );
+  }
+
+  if (typeof existingFilters === 'string') {
+    return existingFilters.split(',');
+  }
+
+  return [];
+}
+
+function getProviders(
+  providers: unknown,
+  {
+    minQuality,
+    excludeAnime
+  }: Pick<AddonConfigContext, 'minQuality' | 'excludeAnime'>
+): string[] | undefined {
+  if (!Array.isArray(providers)) return undefined;
+
+  let nextProviders = providers.filter(
+    (provider): provider is string => typeof provider === 'string'
+  );
+
+  if (minQuality === '720p') {
+    nextProviders = nextProviders.filter((provider) =>
+      STRICT_MIN_720_PROVIDERS.has(provider.trim().toLowerCase())
+    );
+  }
+
+  if (excludeAnime) {
+    nextProviders = nextProviders.filter(
+      (provider: string) => !ANIME_PROVIDERS.has(provider.trim().toLowerCase())
+    );
+  }
+
+  return nextProviders;
 }
 
 export function configureTorrentsDB(
@@ -39,9 +94,12 @@ export function configureTorrentsDB(
   } = context;
 
   const updateData: any = {
-    sizefilter: size ? convertToMegabytes(size) : '',
-    qualityfilter: [] as string[]
+    sizefilter: size ? convertToMegabytes(size) : ''
   };
+  const qualityFiltersToAdd = [
+    ...(no4k ? NO_4K_QUALITY_FILTERS : []),
+    ...getTorrentioQualityFilters(minQuality)
+  ];
 
   if (debridEntries.length > 0) {
     updateData.sort = 'qualitysize';
@@ -50,38 +108,28 @@ export function configureTorrentsDB(
     });
   }
 
-  if (presetConfig.torrentsdb.transportUrl) {
-    const decoded = decodeURIComponent(presetConfig.torrentsdb.transportUrl);
-    const qualityMatch = decoded.match(/qualityfilter=([^&|]+)/);
-    if (qualityMatch?.[1]) {
-      const existingFilters = qualityMatch[1]!.split(',');
-      updateData.qualityfilter = appendUniqueFilters(existingFilters, [
-        ...(no4k
-          ? ['4k', 'brremux', 'hdrall', 'dolbyvisionwithhdr', 'dolbyvision']
-          : []),
-        ...getTorrentioQualityFilters(minQuality)
-      ]);
-    }
-  }
-
   updateTransportUrl({
     presetConfig,
     serviceKey: 'torrentsdb',
     manifestNameSuffix: debridServiceName,
-    updateData: (data: any) => ({
-      ...data,
-      ...updateData,
-      ...(debridEntries.length > 0
-        ? { debridoptions: getDebridOptions(cached, data.debridoptions) }
-        : {}),
-      ...(excludeAnime && Array.isArray(data.providers)
-        ? {
-            providers: data.providers.filter(
-              (provider: string) =>
-                !ANIME_PROVIDERS.has(provider.trim().toLowerCase())
-            )
-          }
-        : {})
-    })
+    updateData: (data: any) => {
+      const providers = getProviders(data.providers, {
+        minQuality,
+        excludeAnime
+      });
+
+      return {
+        ...data,
+        ...updateData,
+        qualityfilter: appendUniqueFilters(
+          normalizeQualityFilters(data.qualityfilter),
+          qualityFiltersToAdd
+        ),
+        ...(debridEntries.length > 0
+          ? { debridoptions: getDebridOptions(cached, data.debridoptions) }
+          : {}),
+        ...(providers ? { providers } : {})
+      };
+    }
   });
 }

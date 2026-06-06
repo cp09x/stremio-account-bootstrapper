@@ -16,6 +16,17 @@ export function configureGuIndex(
 ): { rebuilt?: any; shouldReplace: boolean } {
   if (!presetConfig.guindex) return { shouldReplace: false };
 
+  const hasStrictStreamConstraints =
+    context.cached ||
+    context.no4k ||
+    context.minQuality === '720p' ||
+    Boolean(context.size);
+
+  if (hasStrictStreamConstraints) {
+    delete presetConfig.guindex;
+    return { shouldReplace: false };
+  }
+
   const supportedDebridEntries = context.debridEntries
     .map((debrid) => ({
       debrid,

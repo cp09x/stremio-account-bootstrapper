@@ -19,6 +19,7 @@ describe('stream preferences', () => {
       'Unknown'
     ]);
     expect(getCometResolutionOverrides('720p')).toEqual({
+      r576p: false,
       r480p: false,
       r360p: false,
       r240p: false,
@@ -39,7 +40,7 @@ describe('stream preferences', () => {
         excludeAnime: true
       })
     ).toBe(
-      'https://torrentio.strem.fun/providers=yts,eztv|qualityfilter=scr,cam,unknown,480p,360p,240p,144p|limit=10/manifest.json'
+      'https://torrentio.strem.fun/providers=yts,eztv|qualityfilter=scr,cam,unknown,576p,480p,360p,240p,144p|limit=10/manifest.json'
     );
   });
 

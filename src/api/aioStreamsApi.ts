@@ -3,6 +3,9 @@ import { getRequest, postRequest, PROXY_BASE_URL } from '../utils/http';
 const API_BASE_URL = 'https://aiostreamsfortheweebs.midnightignite.me';
 const TEMPLATE_URL =
   'https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-and-Sorting/f8f60711549de651221493abcc72b22dc4e36309/AIOStreams%20Templates/Tamtaro-complete-setup-template.json'; // v2.6.1
+const TEMPLATE_TIMEOUT_MS = 20000;
+const CONFIG_TIMEOUT_MS = 30000;
+const MANIFEST_TIMEOUT_MS = 20000;
 
 type AIOStreamsResponse = {
   success: boolean;
@@ -15,7 +18,9 @@ type AIOStreamsResponse = {
 export const getAddonConfig = async (config: object): Promise<any> => {
   const response = (await postRequest(
     `${PROXY_BASE_URL}${API_BASE_URL}/api/v1/user`,
-    config
+    config,
+    {},
+    CONFIG_TIMEOUT_MS
   )) as AIOStreamsResponse | null | undefined;
 
   if (
@@ -34,7 +39,11 @@ export const getAddonConfig = async (config: object): Promise<any> => {
 
   const manifestUrl = `${API_BASE_URL}/stremio/${response.data.uuid}/${response.data.encryptedPassword}/manifest.json`;
 
-  const responseManifest = await getRequest(manifestUrl);
+  const responseManifest = await getRequest(
+    manifestUrl,
+    {},
+    MANIFEST_TIMEOUT_MS
+  );
 
   if (!responseManifest) {
     throw new Error('AIOStreams manifest request returned no data');
@@ -47,7 +56,7 @@ export const getAddonConfig = async (config: object): Promise<any> => {
 };
 
 export const getTemplate = async (): Promise<any> => {
-  const template = await getRequest(TEMPLATE_URL);
+  const template = await getRequest(TEMPLATE_URL, {}, TEMPLATE_TIMEOUT_MS);
 
   if (!template) {
     throw new Error('Error fetching AIOStreams template');

@@ -46,6 +46,7 @@ describe('configureComet', () => {
       resultFormat: COMET_COMPACT_RESULT_FORMAT,
       resolutions: {
         r2160p: true,
+        r576p: false,
         r480p: false,
         r360p: false,
         r240p: false,

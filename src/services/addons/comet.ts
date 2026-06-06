@@ -4,6 +4,7 @@ import type { AddonConfigContext } from './types';
 import { getCometResolutionOverrides } from '../../utils/streamPreferences';
 
 export const COMET_COMPACT_RESULT_FORMAT = [
+  'title',
   'video_info',
   'audio_info',
   'quality_info',

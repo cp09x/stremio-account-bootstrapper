@@ -41,11 +41,8 @@
     "allinone": [
       "cinemeta",
       "aiometadata",
-      "comet",
-      "torrentsdb",
-      "torrentio",
       "aiostreams",
-      "guindex",
+      "torrentsdb",
       "streailer",
       "opensubtitlespro"
     ],
@@ -2084,7 +2081,7 @@
     },
     "nl": {
       "torrentio": {
-        "transportUrl": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,aanidex,nekobt|language=dutch|qualityfilter=threed,{{it.no4k}}scr,cam,unknown{{it.maxSize}}|limit={{it.limit}}{{it.transportUrl}}/manifest.json"
+        "transportUrl": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|language=dutch|qualityfilter=threed,{{it.no4k}}scr,cam,unknown{{it.maxSize}}|limit={{it.limit}}{{it.transportUrl}}/manifest.json"
       },
       "comet": {
         "transportUrl": "https://comet.feels.legal/eyJtYXhSZXN1bHRzUGVyUmVzb2x1dGlvbiI6MTAsIm1heFNpemUiOjAsImNhY2hlZE9ubHkiOmZhbHNlLCJyZW1vdmVUcmFzaCI6dHJ1ZSwicmVzdWx0Rm9ybWF0IjpbImFsbCJdLCJkZWJyaWRTZXJ2aWNlIjoidG9ycmVudCIsImRlYnJpZEFwaUtleSI6IiIsImRlYnJpZFN0cmVhbVByb3h5UGFzc3dvcmQiOiIiLCJsYW5ndWFnZXMiOnsiZXhjbHVkZSI6W10sInByZWZlcnJlZCI6WyJubCJdfSwicmVzb2x1dGlvbnMiOnsicjI0MHAiOmZhbHNlLCJyMzYwcCI6ZmFsc2UsInVua25vd24iOmZhbHNlfSwib3B0aW9ucyI6eyJyZW1vdmVfcmFua3NfdW5kZXIiOi0xMDAwMDAwMDAwMCwiYWxsb3dfZW5nbGlzaF9pbl9sYW5ndWFnZXMiOmZhbHNlLCJyZW1vdmVfdW5rbm93bl9sYW5ndWFnZXMiOmZhbHNlfX0=/manifest.json"

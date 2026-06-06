@@ -10,19 +10,23 @@ const createPreset = () => ({
   }
 });
 
-const createContext = (debridEntries: any[]) => ({
+const createContext = (
+  debridEntries: any[],
+  overrides: Record<string, any> = {}
+) => ({
   language: 'pt-BR',
   no4k: false,
-  cached: true,
+  cached: false,
   limit: 10,
-  size: 30,
+  size: '',
   debridEntries,
   debridServiceName: debridEntries
     .map((debrid) => (debrid.service === 'realdebrid' ? 'RD' : 'TB'))
     .join(' + '),
   preset: 'allinone',
-  minQuality: '720p' as const,
-  excludeAnime: true
+  minQuality: 'any' as const,
+  excludeAnime: true,
+  ...overrides
 });
 
 describe('configureGuIndex', () => {
@@ -60,6 +64,21 @@ describe('configureGuIndex', () => {
     const result = configureGuIndex(
       presetConfig,
       createContext([{ service: 'debridlink', key: 'DL-KEY' }])
+    );
+
+    expect(result.shouldReplace).toBe(false);
+    expect(presetConfig.guindex).toBeUndefined();
+  });
+
+  it('removes GuIndex when strict stream filters cannot be enforced', () => {
+    const presetConfig = createPreset();
+
+    const result = configureGuIndex(
+      presetConfig,
+      createContext([{ service: 'realdebrid', key: 'A'.repeat(52) }], {
+        cached: true,
+        minQuality: '720p'
+      })
     );
 
     expect(result.shouldReplace).toBe(false);

@@ -19,7 +19,7 @@ const AIOSTREAMS_BELOW_720_RESOLUTIONS = [
   'Unknown'
 ];
 
-const TORRENTIO_BELOW_720_FILTERS = ['480p', '360p', '240p', '144p'];
+const TORRENTIO_BELOW_720_FILTERS = ['576p', '480p', '360p', '240p', '144p'];
 
 const ANIME_PROVIDERS = new Set([
   'anidex',
@@ -46,6 +46,7 @@ export function getCometResolutionOverrides(
   if (minQuality !== '720p') return {};
 
   return {
+    r576p: false,
     r480p: false,
     r360p: false,
     r240p: false,

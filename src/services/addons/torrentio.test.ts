@@ -51,7 +51,7 @@ describe('configureTorrentio', () => {
       'torbox=123e4567-e89b-12d3-a456-426614174000'
     );
     expect(result.rebuilt.torrentio_realdebrid.transportUrl).toContain(
-      'qualityfilter=4k,scr,cam,unknown,480p,360p,240p,144p'
+      'qualityfilter=4k,scr,cam,unknown,576p,480p,360p,240p,144p'
     );
     expect(result.rebuilt.torrentio_realdebrid.transportUrl).toContain(
       'sizefilter=30GB'

@@ -254,8 +254,6 @@ export async function configureAioStreams(
     tvdbApiKey: advanced?.tvdbKey || '',
     tmdbApiKey: advanced?.tmdbKey || '',
     ...(!advanced?.tmdbKey && {
-      yearMatching: { enabled: false },
-      titleMatching: { enabled: false },
       bitrate: { useMetadataRuntime: false }
     })
   };
