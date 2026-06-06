@@ -6,7 +6,6 @@
       "torrentio",
       "comet",
       "streailer",
-      "subherov2",
       "opensubtitlespro"
     ],
     "standard": [
@@ -14,10 +13,10 @@
       "aiometadata",
       "torrentio",
       "comet",
+      "guindex",
       "meteor",
       "webstreamrmbg",
       "streailer",
-      "subherov2",
       "opensubtitlespro"
     ],
     "full": [
@@ -25,6 +24,7 @@
       "aiometadata",
       "torrentio",
       "comet",
+      "guindex",
       "stremthrutorz",
       "sootio",
       "jackettio",
@@ -35,16 +35,18 @@
       "sootiohttp",
       "hdhub",
       "streailer",
-      "subherov2",
       "opensubtitlespro",
       "localfiles"
     ],
     "allinone": [
       "cinemeta",
       "aiometadata",
+      "comet",
+      "torrentsdb",
+      "torrentio",
       "aiostreams",
+      "guindex",
       "streailer",
-      "subherov2",
       "opensubtitlespro"
     ],
     "http_only": [
@@ -54,16 +56,9 @@
       "sootiohttp",
       "hdhub",
       "streailer",
-      "subherov2",
       "opensubtitlespro"
     ],
-    "no_streams": [
-      "cinemeta",
-      "aiometadata",
-      "streailer",
-      "subherov2",
-      "opensubtitlespro"
-    ],
+    "no_streams": ["cinemeta", "aiometadata", "streailer", "opensubtitlespro"],
     "factory": [
       "cinemeta-unmodified",
       "stremiochannels",
@@ -247,6 +242,25 @@
         "flags": {
           "official": false,
           "protected": false
+        }
+      },
+      "guindex": {
+        "transportUrl": "https://guindex-stremio.vercel.app/manifest.json",
+        "manifest": {
+          "id": "org.guindex.addon",
+          "version": "2.2.0",
+          "name": "GuIndex",
+          "description": "Brazilian stream addon for Stremio. Searches national torrent indexes and resolves streams through Real-Debrid or TorBox.",
+          "resources": ["stream"],
+          "types": ["movie", "series"],
+          "catalogs": [],
+          "logo": "https://raw.githubusercontent.com/GuickerZ/guindex/main/public/logo.png",
+          "behaviorHints": {
+            "adult": false,
+            "p2p": false,
+            "configurable": false,
+            "configurationRequired": false
+          }
         }
       },
       "mediafusion": {
@@ -1891,6 +1905,25 @@
       },
       "comet": {
         "transportUrl": "https://comet.feels.legal/eyJtYXhSZXN1bHRzUGVyUmVzb2x1dGlvbiI6MTAsIm1heFNpemUiOjAsImNhY2hlZE9ubHkiOmZhbHNlLCJyZW1vdmVUcmFzaCI6dHJ1ZSwicmVzdWx0Rm9ybWF0IjpbImFsbCJdLCJkZWJyaWRTZXJ2aWNlIjoidG9ycmVudCIsImRlYnJpZEFwaUtleSI6IiIsImRlYnJpZFN0cmVhbVByb3h5UGFzc3dvcmQiOiIiLCJsYW5ndWFnZXMiOnsiZXhjbHVkZSI6W10sInByZWZlcnJlZCI6WyJwdCJdfSwicmVzb2x1dGlvbnMiOnsicjI0MHAiOmZhbHNlLCJyMzYwcCI6ZmFsc2UsInVua25vd24iOmZhbHNlfSwib3B0aW9ucyI6eyJyZW1vdmVfcmFua3NfdW5kZXIiOi0xMDAwMDAwMDAwMCwiYWxsb3dfZW5nbGlzaF9pbl9sYW5ndWFnZXMiOmZhbHNlLCJyZW1vdmVfdW5rbm93bl9sYW5ndWFnZXMiOmZhbHNlfX0=/manifest.json"
+      },
+      "guindex": {
+        "transportUrl": "https://guindex-stremio.vercel.app/manifest.json",
+        "manifest": {
+          "id": "org.guindex.addon",
+          "version": "2.2.0",
+          "name": "GuIndex",
+          "description": "Addon brasileiro para Stremio. Busca torrents nacionais via torrent-indexer e resolve via Real-Debrid ou TorBox.",
+          "resources": ["stream"],
+          "types": ["movie", "series"],
+          "catalogs": [],
+          "logo": "https://raw.githubusercontent.com/GuickerZ/guindex/main/public/logo.png",
+          "behaviorHints": {
+            "adult": false,
+            "p2p": false,
+            "configurable": false,
+            "configurationRequired": false
+          }
+        }
       },
       "jackettio": {
         "transportUrl": "https://jackettio.elfhosted.com/eyJtYXhUb3JyZW50cyI6OCwicHJpb3RpemVQYWNrVG9ycmVudHMiOjIsImV4Y2x1ZGVLZXl3b3JkcyI6WyJjYW0iLCJzY3JlZW5lciJdLCJkZWJyaWRJZCI6IiIsImhpZGVVbmNhY2hlZCI6ZmFsc2UsInNvcnRDYWNoZWQiOltbInF1YWxpdHkiLHRydWVdLFsic2l6ZSIsdHJ1ZV1dLCJzb3J0VW5jYWNoZWQiOltbInF1YWxpdHkiLHRydWVdLFsic2VlZGVycyIsdHJ1ZV1dLCJmb3JjZUNhY2hlTmV4dEVwaXNvZGUiOmZhbHNlLCJwcmlvdGl6ZUxhbmd1YWdlcyI6WyJicmF6aWxpYW4iLCJwb3J0dWd1ZXNlIl0sImluZGV4ZXJUaW1lb3V0U2VjIjo2MCwibWV0YUxhbmd1YWdlIjoiIiwiZW5hYmxlTWVkaWFGbG93IjpmYWxzZSwibWVkaWFmbG93UHJveHlVcmwiOiIiLCJtZWRpYWZsb3dBcGlQYXNzd29yZCI6IiIsIm1lZGlhZmxvd1B1YmxpY0lwIjoiIiwidXNlU3RyZW1UaHJ1Ijp0cnVlLCJzdHJlbXRocnVVcmwiOiJodHRwOi8vZWxmaG9zdGVkLWludGVybmFsLnN0cmVtdGhydSIsInF1YWxpdGllcyI6WzQ4MCw3MjAsMTA4MCwyMTYwXSwiaW5kZXhlcnMiOlsiYml0c2VhcmNoIiwiZXp0diIsInRoZXBpcmF0ZWJheSIsInRoZXJhcmJnIiwieXRzIl0sImRlYnJpZEFwaUtleSI6IiJ9/manifest.json"

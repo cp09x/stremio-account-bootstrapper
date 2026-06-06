@@ -5,8 +5,12 @@ import {
 import type { AddonConfigContext } from './types';
 import { getLanguageName } from '../../utils/language';
 import { convertToBytes } from '../../utils/sizeConverters';
-import { merge } from 'lodash';
+import _ from 'lodash';
 import { applyTemplateConditionals } from '../../utils/templateConditionals';
+import {
+  applyStreamOnlyManifest,
+  getExcludedResolutions
+} from '../../utils/streamPreferences';
 
 function addLanguageSpecificAddons(
   presets: any[],
@@ -105,6 +109,16 @@ function getWebStreamrConfig(language: string): any {
   };
 }
 
+function restrictPresetMediaTypes(presets: any[]): void {
+  if (!Array.isArray(presets)) return;
+
+  for (const preset of presets) {
+    if (Array.isArray(preset?.options?.mediaTypes)) {
+      preset.options.mediaTypes = ['movie', 'series'];
+    }
+  }
+}
+
 // Extract default values
 function extractInputDefaults(inputs: any[]): Record<string, any> {
   const defaults: Record<string, any> = {};
@@ -133,7 +147,7 @@ function processTemplate(
   selectedSvcs: string[]
 ): any {
   const inputDefaults = extractInputDefaults(template?.metadata?.inputs || []);
-  const mergedProps = merge({}, inputDefaults, props);
+  const mergedProps = _.merge({}, inputDefaults, props);
   return applyTemplateConditionals(template, mergedProps, selectedSvcs);
 }
 
@@ -151,7 +165,9 @@ export async function configureAioStreams(
     cached,
     size,
     password,
-    advanced
+    advanced,
+    minQuality,
+    excludeAnime
   } = context;
   const isDebridUser = debridEntries.length > 0;
 
@@ -213,10 +229,14 @@ export async function configureAioStreams(
   const webstreamrConfig = getWebStreamrConfig(language);
   template.config.presets.push(webstreamrConfig);
 
+  if (excludeAnime) {
+    restrictPresetMediaTypes(template.config.presets);
+  }
+
   // Build config overrides
   const configOverrides = {
     services: debridServices,
-    excludedResolutions: ['360p', '240p', '144p'],
+    excludedResolutions: getExcludedResolutions(minQuality),
     ...(size && {
       size: {
         global: {
@@ -230,8 +250,8 @@ export async function configureAioStreams(
     formatter: {
       id: 'lightgdrive'
     },
-    tmdbAccessToken: '',
-    tvdbApiKey: '',
+    tmdbAccessToken: advanced?.tmdbAccessToken || '',
+    tvdbApiKey: advanced?.tvdbKey || '',
     tmdbApiKey: advanced?.tmdbKey || '',
     ...(!advanced?.tmdbKey && {
       yearMatching: { enabled: false },
@@ -253,6 +273,7 @@ export async function configureAioStreams(
       presetConfig.aiostreams.manifest = aioStreamsData.manifest;
       presetConfig.aiostreams.manifest.name =
         'AIOStreams' + (debridServiceName ? ` | ${debridServiceName}` : '');
+      applyStreamOnlyManifest(presetConfig.aiostreams.manifest);
       presetConfig.aiostreams.transportUrl = aioStreamsData.transportUrl;
     } else {
       delete presetConfig.aiostreams;

@@ -5,6 +5,11 @@ import { format } from 'date-fns';
 import { useI18n } from 'vue-i18n';
 import { addNotification } from '../composables/useNotifications';
 import { useAnalytics } from '../composables/useAnalytics';
+import {
+  buildBackupFilename,
+  createAccountBackup,
+  parseAccountBackup
+} from '../services/accountBackup';
 
 const { authKey, platform } = defineProps({
   authKey: { type: String },
@@ -27,13 +32,20 @@ function backupConfig() {
 
   getAddonCollection(platform, authKey)
     .then((data) => {
-      const blob = new Blob([JSON.stringify(data, null, 2)], {
+      const backup = createAccountBackup({
+        addonCollection: data,
+        platform
+      });
+      const blob = new Blob([JSON.stringify(backup, null, 2)], {
         type: 'application/json'
       });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${platform}-addons-config-${format(new Date(), 'yyyy-MM-dd_HH-mm-ss')}.json`;
+      a.download = buildBackupFilename({
+        platform,
+        prefix: `addons-config-${format(new Date(), 'yyyy-MM-dd_HH-mm-ss')}`
+      });
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -72,19 +84,16 @@ async function restoreConfigFile(event) {
   try {
     const text = await file.text();
     const parsed = JSON.parse(text);
+    const backup = parseAccountBackup(parsed);
 
-    const addonsPayload =
-      parsed?.result?.addons ?? (Array.isArray(parsed) ? parsed : null);
-
-    if (!addonsPayload) {
-      addNotification(t('invalid_backup_file'), 'error');
-      throw new Error(t('invalid_backup_file'));
-    }
-
-    await setAddonCollection(platform, addonsPayload, authKey);
+    await setAddonCollection(platform, backup.addons, authKey);
     addNotification(t('restore_successful'), 'success');
     track('restore_config_click', {
-      title: `Restore config (${platform})`
+      title: `Restore config (${platform})`,
+      vars: {
+        sourceFormat: backup.sourceFormat,
+        addonCount: backup.addons.length
+      }
     });
   } catch (e) {
     error.value = e?.message || String(e);
@@ -139,6 +148,9 @@ async function restoreConfigFile(event) {
           />
         </div>
       </div>
+      <p class="text-xs text-warning mt-4">
+        {{ $t('backup_contains_secrets') }}
+      </p>
     </div>
   </section>
 </template>

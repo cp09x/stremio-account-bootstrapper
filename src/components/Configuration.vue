@@ -1,11 +1,9 @@
 <script setup>
 import { ref, computed, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { Buffer } from 'buffer';
 import draggable from 'vuedraggable';
 import AddonItem from './AddonItem.vue';
 import DynamicForm from './DynamicForm.vue';
-import _ from 'lodash';
 import { QuestionMarkCircleIcon } from '@heroicons/vue/24/outline';
 import { addNotification } from '../composables/useNotifications';
 import { useAnalytics } from '../composables/useAnalytics';
@@ -42,17 +40,15 @@ let dragging = false;
 let addons = ref([]);
 let customAddons = ref(['']);
 let extras = ref([]);
-let options = ref([]);
+let options = ref(['cached', 'min720p', 'excludeAnime']);
 let maxSize = ref('');
 let isSyncButtonEnabled = ref(false);
 let isLoadingPreset = ref(false);
 let isSyncAddons = ref(false);
 let language = ref('en');
-let preset = ref('standard');
+let preset = ref('allinone');
 
-let debridService = ref('');
 let debridEntries = ref([{ service: '', key: '' }]);
-let debridServiceName = '';
 let collections = [];
 let nuvioProfiles = ref([]);
 let selectedNuvioProfileId = ref(1);
@@ -88,15 +84,20 @@ const hasDebridSelected = computed(() =>
   debridEntries.value.some((e) => e.service)
 );
 
-let torrentioConfig = '';
-let peerflixConfig = '';
 let isEditModalVisible = ref(false);
 let currentManifest = ref({});
 let currentEditIdx = ref(null);
 
 let advancedOptions = ref({
   rpdbKey: '',
-  tmdbKey: ''
+  tmdbKey: '',
+  tmdbAccessToken: '',
+  tvdbKey: '',
+  fanartKey: '',
+  geminiKey: '',
+  topPosterKey: '',
+  mdblistKey: '',
+  publicMetaDbKey: ''
 });
 
 async function loadUserAddons() {
@@ -114,11 +115,7 @@ async function loadUserAddons() {
   try {
     const {
       selectedAddons,
-      presetConfig: builtPresetConfig,
-      debridServiceName: builtDebridServiceName,
       collections: builtCollections = [],
-      torrentioConfig: builtTorrentioConfig,
-      peerflixConfig: builtPeerflixConfig,
       errors: presetErrors = []
     } = await buildPresetService({
       preset: preset.value,
@@ -128,20 +125,16 @@ async function loadUserAddons() {
       options: options.value,
       maxSize: maxSize.value,
       advanced: {
-        rpdbKey: advancedOptions.value.rpdbKey,
-        tmdbKey: advancedOptions.value.tmdbKey
+        ...advancedOptions.value
       },
       debridEntries: debridEntries.value,
-      isDebridApiKeyValid: isDebridApiKeyValid.value,
       password: generatedPassword.value,
       platform: props.platform
     });
 
     addons.value = selectedAddons;
-    debridServiceName = builtDebridServiceName;
     collections = builtCollections;
-    torrentioConfig = builtTorrentioConfig;
-    peerflixConfig = builtPeerflixConfig;
+    isSyncButtonEnabled.value = selectedAddons.length > 0;
 
     if (presetErrors.length > 0) {
       addNotification(presetErrors.join('\n'), 'warning');
@@ -151,8 +144,10 @@ async function loadUserAddons() {
     const errorMessage =
       error instanceof Error ? error.message : t('failed_fetching_presets');
     addNotification(errorMessage, 'error');
+    addons.value = [];
+    collections = [];
+    isSyncButtonEnabled.value = false;
   } finally {
-    isSyncButtonEnabled.value = true;
     isLoadingPreset.value = false;
   }
 }
@@ -183,7 +178,10 @@ async function syncUserAddons() {
         platform: props.platform,
         language: language.value,
         preset: preset.value,
-        debrid: debridService.value || ''
+        debrid: debridEntries.value
+          .filter((entry) => entry.service)
+          .map((entry) => entry.service)
+          .join(',')
       }
     });
     isPasswordModalVisible.value = preset.value !== 'factory';
@@ -322,7 +320,7 @@ async function loadNuvioProfiles() {
   } catch (error) {
     console.error('Failed to load profiles', error);
     resetNuvioProfiles();
-    addNotification(t('profiles_load_failed'), 'error');
+    addNotification(t('profile_load_failed'), 'error');
   } finally {
     isLoadingNuvioProfiles.value = false;
   }
@@ -891,6 +889,24 @@ watch(
             <span class="label-text ml-2">{{ $t('cached_only_debrid') }}</span>
           </label>
           <label class="label cursor-pointer">
+            <input
+              type="checkbox"
+              value="min720p"
+              v-model="options"
+              class="checkbox checkbox-primary"
+            />
+            <span class="label-text ml-2">{{ $t('minimum_720p') }}</span>
+          </label>
+          <label class="label cursor-pointer">
+            <input
+              type="checkbox"
+              value="excludeAnime"
+              v-model="options"
+              class="checkbox checkbox-primary"
+            />
+            <span class="label-text ml-2">{{ $t('exclude_anime') }}</span>
+          </label>
+          <label class="label cursor-pointer">
             <span class="label-text">{{ $t('max_size') }}</span>
             <select v-model="maxSize" class="select select-bordered w-32">
               <option :value="''">{{ $t('no_size_limit') }}</option>
@@ -985,6 +1001,104 @@ watch(
               <QuestionMarkCircleIcon class="h-5 w-5 text-primary" />
             </a>
           </div>
+          <div class="flex items-center gap-2">
+            <input
+              v-model="advancedOptions.tmdbAccessToken"
+              class="input input-bordered w-full"
+              :placeholder="$t('enter_tmdb_access_token')"
+            />
+            <a
+              target="_blank"
+              href="https://www.themoviedb.org/settings/api"
+              class="inline-block align-middle"
+            >
+              <QuestionMarkCircleIcon class="h-5 w-5 text-primary" />
+            </a>
+          </div>
+          <div class="flex items-center gap-2">
+            <input
+              v-model="advancedOptions.tvdbKey"
+              class="input input-bordered w-full"
+              :placeholder="$t('enter_tvdb_key')"
+            />
+            <a
+              target="_blank"
+              href="https://thetvdb.com/api-information"
+              class="inline-block align-middle"
+            >
+              <QuestionMarkCircleIcon class="h-5 w-5 text-primary" />
+            </a>
+          </div>
+          <div class="flex items-center gap-2">
+            <input
+              v-model="advancedOptions.fanartKey"
+              class="input input-bordered w-full"
+              :placeholder="$t('enter_fanart_key')"
+            />
+            <a
+              target="_blank"
+              href="https://fanart.tv"
+              class="inline-block align-middle"
+            >
+              <QuestionMarkCircleIcon class="h-5 w-5 text-primary" />
+            </a>
+          </div>
+          <div class="flex items-center gap-2">
+            <input
+              v-model="advancedOptions.geminiKey"
+              class="input input-bordered w-full"
+              :placeholder="$t('enter_gemini_key')"
+            />
+            <a
+              target="_blank"
+              href="https://aistudio.google.com"
+              class="inline-block align-middle"
+            >
+              <QuestionMarkCircleIcon class="h-5 w-5 text-primary" />
+            </a>
+          </div>
+          <div class="flex items-center gap-2">
+            <input
+              v-model="advancedOptions.topPosterKey"
+              class="input input-bordered w-full"
+              :placeholder="$t('enter_top_poster_key')"
+            />
+            <a
+              target="_blank"
+              href="https://api.top-streaming.stream/user/dashboard"
+              class="inline-block align-middle"
+            >
+              <QuestionMarkCircleIcon class="h-5 w-5 text-primary" />
+            </a>
+          </div>
+          <div class="flex items-center gap-2">
+            <input
+              v-model="advancedOptions.mdblistKey"
+              class="input input-bordered w-full"
+              :placeholder="$t('enter_mdblist_key')"
+            />
+            <a
+              target="_blank"
+              href="https://mdblist.com/preferences"
+              class="inline-block align-middle"
+            >
+              <QuestionMarkCircleIcon class="h-5 w-5 text-primary" />
+            </a>
+          </div>
+          <div class="flex items-center gap-2">
+            <input
+              v-model="advancedOptions.publicMetaDbKey"
+              class="input input-bordered w-full"
+              :placeholder="$t('enter_publicmetadb_key')"
+            />
+            <a
+              target="_blank"
+              href="https://publicmetadb.com"
+              class="inline-block align-middle"
+            >
+              <QuestionMarkCircleIcon class="h-5 w-5 text-primary" />
+            </a>
+          </div>
         </div>
       </fieldset>
 
@@ -998,7 +1112,7 @@ watch(
           @click="loadUserAddons"
           :disabled="
             !props.authKey ||
-            (debridService ? !isDebridApiKeyValid : false) ||
+            (hasDebridSelected && !isDebridApiKeyValid) ||
             isLoadingPreset
           "
         >

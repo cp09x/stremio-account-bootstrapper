@@ -12,6 +12,12 @@ dist
 dist-ssr
 *.local
 
+# Local account/test artifacts
+.playwright-mcp
+stremio-current-addons*.json
+stremio-plugins-keys*.md
+*.private.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

@@ -1,8 +1,9 @@
 import { postRequest, getRequest } from '../utils/http';
 import { NUVIO_BASE_URL, NUVIO_PROXY_PREFIX } from '../config/nuvio';
 
-const nuvioDevApiKey = import.meta.env.VITE_NUVIO_API_KEY;
-const useDirectNuvio = import.meta.env.DEV;
+const viteEnv = import.meta.env ?? {};
+const nuvioDevApiKey = viteEnv.VITE_NUVIO_API_KEY;
+const useDirectNuvio = Boolean(viteEnv.DEV);
 const nuvioApiBase = useDirectNuvio ? NUVIO_BASE_URL : NUVIO_PROXY_PREFIX;
 
 const withNuvioHeaders = (opts: RequestInit = {}): RequestInit => ({

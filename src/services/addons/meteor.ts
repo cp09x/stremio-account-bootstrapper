@@ -2,6 +2,7 @@ import _ from 'lodash';
 import { updateTransportUrl } from '../../utils/transportUrl';
 import { debridServicesInfo } from '../../utils/debrid';
 import type { AddonConfigContext } from './types';
+import { filterResolutionsByMinQuality } from '../../utils/streamPreferences';
 
 export function configureMeteor(
   presetConfig: any,
@@ -9,7 +10,8 @@ export function configureMeteor(
 ): { rebuilt?: any; shouldReplace: boolean } {
   if (!presetConfig.meteor) return { shouldReplace: false };
 
-  const { debridEntries, cached, limit, size, no4k, language } = context;
+  const { debridEntries, cached, limit, size, no4k, language, minQuality } =
+    context;
 
   const sizeRange = size
     ? (() => {
@@ -33,9 +35,12 @@ export function configureMeteor(
     clonedData.cachedOnly = cached;
     clonedData.maxResultsPerRes = limit;
     clonedData.maxSize = size ? sizeRange : 0;
-    clonedData.resolutions = no4k
-      ? (clonedData.resolutions ?? []).filter((res: string) => res !== '4k')
-      : (clonedData.resolutions ?? []);
+    clonedData.resolutions = filterResolutionsByMinQuality(
+      no4k
+        ? (clonedData.resolutions ?? []).filter((res: string) => res !== '4k')
+        : (clonedData.resolutions ?? []),
+      minQuality
+    );
 
     return clonedData;
   };
