@@ -45,6 +45,7 @@ describe('configureTorrentsDB', () => {
     expect(decoded.debridoptions).toEqual(['nodownloadlinks', 'nocatalog']);
     expect(decoded.realdebrid).toBe('A'.repeat(52));
     expect(decoded.sort).toBe('qualitysize');
+    expect(decoded.limit).toBe('5');
     expect(decoded.qualityfilter).toEqual([
       'scr',
       'cam',

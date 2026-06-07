@@ -10,6 +10,7 @@ import {
 const ANIME_PROVIDERS = new Set(['nyaa', 'animetosho', 'tokyotosho']);
 const LOW_CONFIDENCE_PROVIDERS = new Set(['manual']);
 const TORRENTSDB_DEBRID_OPTIONS = ['nocatalog'];
+const TORRENTSDB_RESULT_LIMIT = 5;
 const NO_4K_QUALITY_FILTERS = [
   '4k',
   'brremux',
@@ -76,6 +77,7 @@ export function configureTorrentsDB(
     debridEntries,
     debridServiceName,
     cached,
+    limit,
     size,
     no4k,
     minQuality,
@@ -83,6 +85,7 @@ export function configureTorrentsDB(
   } = context;
 
   const updateData: any = {
+    limit: String(Math.min(limit, TORRENTSDB_RESULT_LIMIT)),
     sizefilter: size ? convertToMegabytes(size) : ''
   };
   const qualityFiltersToAdd = [
