@@ -10,6 +10,10 @@ import {
   createAccountBackup,
   parseAccountBackup
 } from '../services/accountBackup';
+import {
+  isBuilderSettingsBackup,
+  parseBuilderSettingsBackup
+} from '../services/builderSettingsBackup';
 
 const { authKey, platform } = defineProps({
   authKey: { type: String },
@@ -19,7 +23,7 @@ const { authKey, platform } = defineProps({
   }
 });
 
-const emit = defineEmits(['restored']);
+const emit = defineEmits(['restored', 'builder-settings']);
 
 const { t } = useI18n();
 const loadingBackup = ref(false);
@@ -142,6 +146,18 @@ async function restoreConfigFile(event) {
   try {
     const text = await file.text();
     const parsed = JSON.parse(text);
+
+    if (isBuilderSettingsBackup(parsed)) {
+      const settings = parseBuilderSettingsBackup(parsed);
+      emit('builder-settings', {
+        fileName: file.name,
+        importedAt: new Date().toISOString(),
+        settings
+      });
+      addNotification('Builder settings imported into the form', 'success');
+      return;
+    }
+
     const backup = parseAccountBackup(parsed);
 
     const restoreResponse = await setAddonCollection(
@@ -200,6 +216,14 @@ async function restoreConfigFile(event) {
     <h2 class="text-2xl font-bold mb-6">{{ $t('backup_restore') }}</h2>
 
     <div class="bg-base-100 p-6 rounded-lg border border-base-300">
+      <div class="mb-4">
+        <p class="font-semibold">Installed account addons</p>
+        <p class="mt-1 text-sm opacity-75">
+          Backup and restore the addon collection installed in your account. Use
+          Configure → Builder settings when you need to export or import
+          editable API keys and preset fields.
+        </p>
+      </div>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <button

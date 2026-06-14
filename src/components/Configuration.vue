@@ -14,6 +14,11 @@ import {
   buildPresetService,
   loadPresetService
 } from '../services/presetService.ts';
+import {
+  buildBuilderSettingsFilename,
+  createBuilderSettingsBackup,
+  parseBuilderSettingsBackup
+} from '../services/builderSettingsBackup.ts';
 import { generatePassword } from '../utils/password.ts';
 import { Tooltip as VTooltip } from 'floating-vue';
 import 'floating-vue/dist/style.css';
@@ -31,6 +36,10 @@ const props = defineProps({
     default: 'stremio'
   },
   restoredAccountSnapshot: {
+    type: Object,
+    default: null
+  },
+  importedBuilderSettings: {
     type: Object,
     default: null
   }
@@ -62,6 +71,8 @@ let isLoadingNuvioProfiles = ref(false);
 let isPasswordModalVisible = ref(false);
 let generatedPassword = ref(generatePassword());
 let currentAccountSnapshot = ref(null);
+let builderSettingsFileInputRef = ref(null);
+let lastBuilderSettingsImport = ref(null);
 
 const MAX_CUSTOM_ADDONS = 10;
 const MAX_DEBRID_ENTRIES = 5;
@@ -120,6 +131,88 @@ let advancedOptions = ref({
   mdblistKey: '',
   publicMetaDbKey: ''
 });
+
+function currentBuilderSettings() {
+  return {
+    preset: preset.value,
+    language: language.value,
+    debridEntries: debridEntries.value.map((entry) => ({ ...entry })),
+    extras: [...extras.value],
+    customAddons: [...customAddons.value],
+    options: [...options.value],
+    maxSize: maxSize.value,
+    advancedOptions: { ...advancedOptions.value }
+  };
+}
+
+function exportBuilderSettings() {
+  const backup = createBuilderSettingsBackup({
+    settings: currentBuilderSettings()
+  });
+  const blob = new Blob([JSON.stringify(backup, null, 2)], {
+    type: 'application/json'
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = buildBuilderSettingsFilename();
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  addNotification('Builder settings exported', 'success');
+}
+
+function openBuilderSettingsFilePicker() {
+  builderSettingsFileInputRef.value?.click();
+}
+
+function applyBuilderSettings(settings, source = {}) {
+  preset.value = settings.preset;
+  language.value = settings.language;
+  debridEntries.value =
+    settings.debridEntries.length > 0
+      ? settings.debridEntries.map((entry) => ({ ...entry }))
+      : [{ service: '', key: '' }];
+  extras.value = [...settings.extras];
+  customAddons.value =
+    settings.customAddons.length > 0 ? [...settings.customAddons] : [''];
+  options.value = [...settings.options];
+  maxSize.value = settings.maxSize;
+  advancedOptions.value = {
+    ...advancedOptions.value,
+    ...settings.advancedOptions
+  };
+  isSyncButtonEnabled.value = false;
+  lastBuilderSettingsImport.value = {
+    fileName: source.fileName || 'Builder settings',
+    importedAt: source.importedAt || new Date().toISOString(),
+    debridServices: debridEntries.value
+      .filter((entry) => entry.service)
+      .map((entry) => entry.service)
+  };
+  addNotification('Builder settings applied to the form', 'success');
+}
+
+async function importBuilderSettingsFile(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  try {
+    const parsed = JSON.parse(await file.text());
+    applyBuilderSettings(parseBuilderSettingsBackup(parsed), {
+      fileName: file.name
+    });
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error
+        ? error.message
+        : 'Failed to import builder settings';
+    addNotification(errorMessage, 'error');
+  } finally {
+    event.target.value = '';
+  }
+}
 
 async function loadUserAddons() {
   const key = props.authKey;
@@ -421,6 +514,20 @@ watch(
 );
 
 watch(
+  () => props.importedBuilderSettings,
+  (payload) => {
+    if (!payload?.settings) {
+      return;
+    }
+
+    applyBuilderSettings(payload.settings, {
+      fileName: payload.fileName,
+      importedAt: payload.importedAt
+    });
+  }
+);
+
+watch(
   () => [props.authKey, props.authSource],
   ([nextAuthKey, nextAuthSource], [previousAuthKey, previousAuthSource]) => {
     if (props.platform !== 'nuvio') {
@@ -448,6 +555,61 @@ watch(
     <h3 class="text-2xl font-bold mb-6">
       {{ $t('configure') }}
     </h3>
+
+    <div class="mb-4 rounded-lg border border-base-300 bg-base-100 p-4">
+      <div
+        class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between"
+      >
+        <div class="space-y-1">
+          <p class="text-base font-semibold">Builder settings</p>
+          <p class="text-sm opacity-75">
+            Export or import the editable form state: debrid keys, advanced API
+            keys, preset, language, filters, and custom addon URLs.
+          </p>
+          <div
+            v-if="lastBuilderSettingsImport"
+            class="mt-3 flex flex-wrap items-center gap-2 text-sm"
+          >
+            <span class="badge badge-success">Applied</span>
+            <span>{{ lastBuilderSettingsImport.fileName }}</span>
+            <span
+              v-for="service in lastBuilderSettingsImport.debridServices"
+              :key="service"
+              class="badge badge-outline"
+            >
+              {{ debridServicesInfo[service]?.label || service }}
+            </span>
+          </div>
+        </div>
+
+        <div class="flex shrink-0 flex-col gap-2 sm:flex-row">
+          <button
+            type="button"
+            class="btn btn-outline"
+            @click="exportBuilderSettings"
+          >
+            Export settings
+          </button>
+          <button
+            type="button"
+            class="btn btn-primary"
+            @click="openBuilderSettingsFilePicker"
+          >
+            Import settings
+          </button>
+          <input
+            ref="builderSettingsFileInputRef"
+            type="file"
+            accept=".json,application/json"
+            class="hidden"
+            @change="importBuilderSettingsFile"
+          />
+        </div>
+      </div>
+      <p class="mt-3 text-xs text-warning">
+        Settings files include visible API keys. Store them like password files.
+      </p>
+    </div>
 
     <div
       v-if="accountSnapshot"

@@ -27,6 +27,7 @@ const authSourceByPlatform = ref({
 });
 
 const restoredAccountSnapshot = ref(null);
+const importedBuilderSettings = ref(null);
 
 const activeAuthKey = computed(
   () => authKeysByPlatform.value[selectedPlatform.value] || ''
@@ -51,6 +52,10 @@ function setAuthKey(payload) {
 
 function setRestoredAccountSnapshot(payload) {
   restoredAccountSnapshot.value = payload;
+}
+
+function setImportedBuilderSettings(payload) {
+  importedBuilderSettings.value = payload;
 }
 </script>
 
@@ -82,12 +87,14 @@ function setRestoredAccountSnapshot(payload) {
       :platform="selectedPlatform"
       :authKey="activeAuthKey"
       @restored="setRestoredAccountSnapshot"
+      @builder-settings="setImportedBuilderSettings"
     />
     <Configuration
       :platform="selectedPlatform"
       :authKey="activeAuthKey"
       :authSource="activeAuthSource"
       :restoredAccountSnapshot="restoredAccountSnapshot"
+      :importedBuilderSettings="importedBuilderSettings"
     />
     <FAQ :platform="selectedPlatform" />
     <ThankYou />
