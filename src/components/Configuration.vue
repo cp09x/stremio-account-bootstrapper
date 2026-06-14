@@ -484,6 +484,24 @@ watch(
         The fields below are a preset builder. They are not automatically
         reverse-filled from restored addon URLs or private API keys.
       </p>
+      <p class="mt-1 text-xs text-warning">
+        Restored API keys stay embedded in the installed private addon URLs.
+        Fill the fields only when you want to generate and overwrite a new
+        preset.
+      </p>
+      <div
+        v-if="accountSnapshot.missingAddonNames?.length"
+        class="mt-3 rounded border border-warning/40 bg-warning/10 p-3 text-sm"
+      >
+        <p class="font-semibold text-warning">
+          Missing after account verification
+        </p>
+        <ul class="mt-2 list-disc pl-5">
+          <li v-for="name in accountSnapshot.missingAddonNames" :key="name">
+            {{ name }}
+          </li>
+        </ul>
+      </div>
     </div>
 
     <form class="space-y-4" onsubmit="return false;">

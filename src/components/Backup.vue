@@ -33,8 +33,38 @@ const platformLabel = computed(() =>
   platform === 'nuvio' ? 'Nuvio' : 'Stremio'
 );
 
+function extractAddonList(response) {
+  if (Array.isArray(response)) {
+    return response;
+  }
+
+  if (Array.isArray(response?.result?.addons)) {
+    return response.result.addons;
+  }
+
+  if (Array.isArray(response?.addons)) {
+    return response.addons;
+  }
+
+  return [];
+}
+
 function getAddonName(addon) {
   return addon?.manifest?.name || addon?.name || 'Unknown addon';
+}
+
+function getAddonUrl(addon) {
+  return typeof addon?.transportUrl === 'string'
+    ? addon.transportUrl
+    : addon?.url || '';
+}
+
+function summarizeMissingAddons(expectedAddons, actualAddons) {
+  const actualUrls = new Set(actualAddons.map(getAddonUrl).filter(Boolean));
+
+  return expectedAddons
+    .filter((addon) => !actualUrls.has(getAddonUrl(addon)))
+    .map(getAddonName);
 }
 
 function summarizeRestore(file, backup) {
@@ -48,6 +78,7 @@ function summarizeRestore(file, backup) {
     addonNames,
     exportedAt: backup.metadata?.exportedAt || '',
     fileName: file.name,
+    missingAddonNames: [],
     platform,
     sourceFormat: backup.sourceFormat
   };
@@ -113,14 +144,40 @@ async function restoreConfigFile(event) {
     const parsed = JSON.parse(text);
     const backup = parseAccountBackup(parsed);
 
-    await setAddonCollection(platform, backup.addons, authKey);
+    const restoreResponse = await setAddonCollection(
+      platform,
+      backup.addons,
+      authKey
+    );
+
+    if (restoreResponse?.result?.success === false) {
+      throw new Error(restoreResponse?.result?.error || 'Restore failed');
+    }
+
     const restoreSummary = summarizeRestore(file, backup);
+
+    const postRestoreCollection = await getAddonCollection(platform, authKey);
+    const restoredAddons = extractAddonList(postRestoreCollection);
+    const missingAddonNames = summarizeMissingAddons(
+      backup.addons,
+      restoredAddons
+    );
+    restoreSummary.missingAddonNames = missingAddonNames;
+
     lastRestore.value = restoreSummary;
     emit('restored', restoreSummary);
-    addNotification(
-      `${t('restore_successful')}: ${backup.addons.length} addons`,
-      'success'
-    );
+
+    if (missingAddonNames.length > 0) {
+      addNotification(
+        `${t('restore_successful')}, but ${missingAddonNames.length} addons were not found after verification`,
+        'warning'
+      );
+    } else {
+      addNotification(
+        `${t('restore_successful')}: ${backup.addons.length} addons verified`,
+        'success'
+      );
+    }
     track('restore_config_click', {
       title: `Restore config (${platform})`,
       vars: {
@@ -222,6 +279,24 @@ async function restoreConfigFile(event) {
           from preset defaults and is not reverse-filled from private addon
           URLs.
         </p>
+        <p class="mt-1 text-xs text-warning">
+          API keys are preserved inside the restored private addon URLs, but the
+          key input fields are only used when generating a new preset.
+        </p>
+
+        <div
+          v-if="lastRestore.missingAddonNames.length > 0"
+          class="mt-3 rounded border border-warning/40 bg-warning/10 p-3 text-sm"
+        >
+          <p class="font-semibold text-warning">
+            Missing after account verification
+          </p>
+          <ul class="mt-2 list-disc pl-5">
+            <li v-for="name in lastRestore.missingAddonNames" :key="name">
+              {{ name }}
+            </li>
+          </ul>
+        </div>
       </div>
     </div>
   </section>
