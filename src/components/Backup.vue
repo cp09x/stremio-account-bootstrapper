@@ -14,6 +14,8 @@ import {
   isBuilderSettingsBackup,
   parseBuilderSettingsBackup
 } from '../services/builderSettingsBackup';
+import { extractBuilderSettingsFromAddons } from '../services/builderSettingsFromAddons';
+import { debridServicesInfo } from '../utils/debrid';
 
 const { authKey, platform } = defineProps({
   authKey: { type: String },
@@ -81,11 +83,17 @@ function summarizeRestore(file, backup) {
     addonCount: backup.addons.length,
     addonNames,
     exportedAt: backup.metadata?.exportedAt || '',
+    extractedDebridServices: [],
     fileName: file.name,
+    keyExtractionMessage: '',
     missingAddonNames: [],
     platform,
     sourceFormat: backup.sourceFormat
   };
+}
+
+function getDebridServiceLabel(service) {
+  return debridServicesInfo[service]?.label || service;
 }
 
 function backupConfig() {
@@ -171,6 +179,26 @@ async function restoreConfigFile(event) {
     }
 
     const restoreSummary = summarizeRestore(file, backup);
+    const extractedBuilderSettings = extractBuilderSettingsFromAddons(
+      backup.addons
+    );
+    restoreSummary.extractedDebridServices =
+      extractedBuilderSettings.debridEntries.map((entry) =>
+        getDebridServiceLabel(entry.service)
+      );
+
+    if (extractedBuilderSettings.debridEntries.length > 0) {
+      emit('builder-settings', {
+        fileName: `${file.name} (extracted from addon URLs)`,
+        importedAt: new Date().toISOString(),
+        settings: extractedBuilderSettings.settings
+      });
+      restoreSummary.keyExtractionMessage =
+        'Editable debrid key fields were filled from recoverable private addon URLs.';
+    } else {
+      restoreSummary.keyExtractionMessage =
+        'No recoverable debrid keys were found in this account-addon backup. The installed addons were restored, but the editable key fields cannot be filled from this file.';
+    }
 
     const postRestoreCollection = await getAddonCollection(platform, authKey);
     const restoredAddons = extractAddonList(postRestoreCollection);
@@ -187,6 +215,11 @@ async function restoreConfigFile(event) {
       addNotification(
         `${t('restore_successful')}, but ${missingAddonNames.length} addons were not found after verification`,
         'warning'
+      );
+    } else if (extractedBuilderSettings.debridEntries.length > 0) {
+      addNotification(
+        `${t('restore_successful')}: ${backup.addons.length} addons verified and ${extractedBuilderSettings.debridEntries.length} key fields filled`,
+        'success'
       );
     } else {
       addNotification(
@@ -298,15 +331,48 @@ async function restoreConfigFile(event) {
           </span>
         </div>
 
-        <p class="mt-3 text-xs text-warning">
-          Restore already updated your account. The Configure form below starts
-          from preset defaults and is not reverse-filled from private addon
-          URLs.
-        </p>
-        <p class="mt-1 text-xs text-warning">
-          API keys are preserved inside the restored private addon URLs, but the
-          key input fields are only used when generating a new preset.
-        </p>
+        <div
+          class="mt-3 rounded border p-3 text-sm"
+          :class="
+            lastRestore.extractedDebridServices.length > 0
+              ? 'border-success/40 bg-success/10'
+              : 'border-warning/40 bg-warning/10'
+          "
+        >
+          <p
+            class="font-semibold"
+            :class="
+              lastRestore.extractedDebridServices.length > 0
+                ? 'text-success'
+                : 'text-warning'
+            "
+          >
+            {{
+              lastRestore.extractedDebridServices.length > 0
+                ? 'Builder keys filled'
+                : 'No editable keys found'
+            }}
+          </p>
+          <p class="mt-1 text-xs">
+            {{ lastRestore.keyExtractionMessage }}
+          </p>
+          <div
+            v-if="lastRestore.extractedDebridServices.length > 0"
+            class="mt-2 flex flex-wrap gap-2"
+          >
+            <span
+              v-for="service in lastRestore.extractedDebridServices"
+              :key="service"
+              class="badge badge-success badge-outline"
+            >
+              {{ service }}
+            </span>
+          </div>
+          <p v-else class="mt-2 text-xs opacity-75">
+            Import a Builder settings backup when you need the form to show API
+            keys, provider choices, language, and preset fields.
+          </p>
+        </div>
 
         <div
           v-if="lastRestore.missingAddonNames.length > 0"
