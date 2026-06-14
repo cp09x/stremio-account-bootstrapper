@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { getAddonCollection, setAddonCollection } from '../api/platformApi';
 import { format } from 'date-fns';
 import { useI18n } from 'vue-i18n';
@@ -19,12 +19,39 @@ const { authKey, platform } = defineProps({
   }
 });
 
+const emit = defineEmits(['restored']);
+
 const { t } = useI18n();
 const loadingBackup = ref(false);
 const loadingRestore = ref(false);
 const error = ref(null);
 const fileInputRef = ref(null);
+const lastRestore = ref(null);
 const { track } = useAnalytics();
+
+const platformLabel = computed(() =>
+  platform === 'nuvio' ? 'Nuvio' : 'Stremio'
+);
+
+function getAddonName(addon) {
+  return addon?.manifest?.name || addon?.name || 'Unknown addon';
+}
+
+function summarizeRestore(file, backup) {
+  const addonNames =
+    backup.metadata?.addonNames?.length > 0
+      ? backup.metadata.addonNames
+      : backup.addons.map(getAddonName);
+
+  return {
+    addonCount: backup.addons.length,
+    addonNames,
+    exportedAt: backup.metadata?.exportedAt || '',
+    fileName: file.name,
+    platform,
+    sourceFormat: backup.sourceFormat
+  };
+}
 
 function backupConfig() {
   loadingBackup.value = true;
@@ -87,7 +114,13 @@ async function restoreConfigFile(event) {
     const backup = parseAccountBackup(parsed);
 
     await setAddonCollection(platform, backup.addons, authKey);
-    addNotification(t('restore_successful'), 'success');
+    const restoreSummary = summarizeRestore(file, backup);
+    lastRestore.value = restoreSummary;
+    emit('restored', restoreSummary);
+    addNotification(
+      `${t('restore_successful')}: ${backup.addons.length} addons`,
+      'success'
+    );
     track('restore_config_click', {
       title: `Restore config (${platform})`,
       vars: {
@@ -151,6 +184,45 @@ async function restoreConfigFile(event) {
       <p class="text-xs text-warning mt-4">
         {{ $t('backup_contains_secrets') }}
       </p>
+
+      <div
+        v-if="lastRestore"
+        class="mt-4 rounded-lg border border-success/30 bg-success/10 p-4"
+      >
+        <div class="flex flex-col gap-1">
+          <p class="font-semibold text-success">
+            Restored to {{ platformLabel }}
+          </p>
+          <p class="text-sm">
+            {{ lastRestore.fileName }} · {{ lastRestore.addonCount }} addons
+          </p>
+          <p v-if="lastRestore.exportedAt" class="text-xs opacity-70">
+            Exported at {{ lastRestore.exportedAt }}
+          </p>
+        </div>
+
+        <div class="mt-3 flex flex-wrap gap-2">
+          <span
+            v-for="name in lastRestore.addonNames.slice(0, 12)"
+            :key="name"
+            class="badge badge-outline"
+          >
+            {{ name }}
+          </span>
+          <span
+            v-if="lastRestore.addonNames.length > 12"
+            class="badge badge-ghost"
+          >
+            +{{ lastRestore.addonNames.length - 12 }} more
+          </span>
+        </div>
+
+        <p class="mt-3 text-xs text-warning">
+          Restore already updated your account. The Configure form below starts
+          from preset defaults and is not reverse-filled from private addon
+          URLs.
+        </p>
+      </div>
     </div>
   </section>
 </template>

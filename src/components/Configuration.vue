@@ -9,7 +9,7 @@ import { addNotification } from '../composables/useNotifications';
 import { useAnalytics } from '../composables/useAnalytics';
 import { isValidApiKey, debridServicesInfo } from '../utils/debrid.ts';
 import { isValidManifestUrl } from '../utils/url.ts';
-import { pullProfiles } from '../api/platformApi';
+import { getAddonCollection, pullProfiles } from '../api/platformApi';
 import {
   buildPresetService,
   loadPresetService
@@ -29,6 +29,10 @@ const props = defineProps({
   platform: {
     type: String,
     default: 'stremio'
+  },
+  restoredAccountSnapshot: {
+    type: Object,
+    default: null
   }
 });
 
@@ -43,6 +47,7 @@ let extras = ref([]);
 let options = ref(['cached', 'min720p', 'excludeAnime']);
 let maxSize = ref('');
 let isSyncButtonEnabled = ref(false);
+let isLoadingCurrentAccount = ref(false);
 let isLoadingPreset = ref(false);
 let isSyncAddons = ref(false);
 let language = ref('en');
@@ -56,6 +61,7 @@ let isLoadingNuvioProfiles = ref(false);
 
 let isPasswordModalVisible = ref(false);
 let generatedPassword = ref(generatePassword());
+let currentAccountSnapshot = ref(null);
 
 const MAX_CUSTOM_ADDONS = 10;
 const MAX_DEBRID_ENTRIES = 5;
@@ -83,6 +89,21 @@ const isDebridApiKeyValid = computed(() => {
 const hasDebridSelected = computed(() =>
   debridEntries.value.some((e) => e.service)
 );
+
+const accountSnapshot = computed(() => {
+  const snapshot =
+    currentAccountSnapshot.value || props.restoredAccountSnapshot;
+
+  if (!snapshot) {
+    return null;
+  }
+
+  if (snapshot.platform && snapshot.platform !== props.platform) {
+    return null;
+  }
+
+  return snapshot;
+});
 
 let isEditModalVisible = ref(false);
 let currentManifest = ref({});
@@ -208,6 +229,70 @@ function copyPassword() {
 
 function removeAddon(idx) {
   addons.value.splice(idx, 1);
+}
+
+function getAddonName(addon) {
+  return addon?.manifest?.name || addon?.name || 'Unknown addon';
+}
+
+function extractAddonList(response) {
+  if (Array.isArray(response)) {
+    return response;
+  }
+
+  if (Array.isArray(response?.result?.addons)) {
+    return response.result.addons;
+  }
+
+  if (Array.isArray(response?.addons)) {
+    return response.addons;
+  }
+
+  return [];
+}
+
+async function loadCurrentAccountAddons() {
+  const key = props.authKey;
+
+  if (!key) {
+    return;
+  }
+
+  isLoadingCurrentAccount.value = true;
+
+  try {
+    const response = await getAddonCollection(
+      props.platform,
+      key,
+      selectedNuvioProfileId.value || 1
+    );
+    const currentAddons = extractAddonList(response);
+
+    addons.value = currentAddons;
+    collections = [];
+    isSyncButtonEnabled.value = currentAddons.length > 0;
+    currentAccountSnapshot.value = {
+      addonCount: currentAddons.length,
+      addonNames: currentAddons.map(getAddonName),
+      fileName: 'Current account',
+      platform: props.platform,
+      sourceFormat: 'account'
+    };
+
+    addNotification(
+      `Loaded ${currentAddons.length} current account addons`,
+      'success'
+    );
+  } catch (error) {
+    console.error('Failed to load current account addons', error);
+    const errorMessage =
+      error instanceof Error
+        ? error.message
+        : 'Failed to load current account addons';
+    addNotification(errorMessage, 'error');
+  } finally {
+    isLoadingCurrentAccount.value = false;
+  }
 }
 
 // functions to manage dynamic custom inputs
@@ -363,6 +448,43 @@ watch(
     <h3 class="text-2xl font-bold mb-6">
       {{ $t('configure') }}
     </h3>
+
+    <div
+      v-if="accountSnapshot"
+      class="mb-4 rounded-lg border border-info/30 bg-info/10 p-4"
+    >
+      <p class="font-semibold text-info">Account snapshot available</p>
+      <p class="mt-1 text-sm">
+        {{ accountSnapshot.addonCount }} addons were
+        {{
+          accountSnapshot.sourceFormat === 'account'
+            ? 'loaded from the current account'
+            : 'restored to the account'
+        }}.
+      </p>
+      <div
+        v-if="accountSnapshot.addonNames?.length"
+        class="mt-3 flex flex-wrap gap-2"
+      >
+        <span
+          v-for="name in accountSnapshot.addonNames.slice(0, 10)"
+          :key="name"
+          class="badge badge-outline"
+        >
+          {{ name }}
+        </span>
+        <span
+          v-if="accountSnapshot.addonNames.length > 10"
+          class="badge badge-ghost"
+        >
+          +{{ accountSnapshot.addonNames.length - 10 }} more
+        </span>
+      </div>
+      <p class="mt-3 text-xs text-warning">
+        The fields below are a preset builder. They are not automatically
+        reverse-filled from restored addon URLs or private API keys.
+      </p>
+    </div>
 
     <form class="space-y-4" onsubmit="return false;">
       <!-- Step 1: Select Preset -->
@@ -1107,23 +1229,47 @@ watch(
         <legend class="text-sm">
           {{ $t('step8_load_preset') }}
         </legend>
-        <button
-          class="btn btn-primary"
-          @click="loadUserAddons"
-          :disabled="
-            !props.authKey ||
-            (hasDebridSelected && !isDebridApiKeyValid) ||
-            isLoadingPreset
-          "
-        >
-          <span
-            v-if="isLoadingPreset"
-            class="loading loading-spinner loading-sm"
-          ></span>
-          {{
-            isLoadingPreset ? $t('loading_addons') : $t('load_addons_preset')
-          }}
-        </button>
+        <div class="flex flex-col gap-3 md:flex-row md:items-center">
+          <button
+            class="btn btn-primary"
+            @click="loadUserAddons"
+            :disabled="
+              !props.authKey ||
+              (hasDebridSelected && !isDebridApiKeyValid) ||
+              isLoadingPreset
+            "
+          >
+            <span
+              v-if="isLoadingPreset"
+              class="loading loading-spinner loading-sm"
+            ></span>
+            {{
+              isLoadingPreset ? $t('loading_addons') : $t('load_addons_preset')
+            }}
+          </button>
+
+          <button
+            type="button"
+            class="btn btn-outline"
+            @click="loadCurrentAccountAddons"
+            :disabled="!props.authKey || isLoadingCurrentAccount"
+          >
+            <span
+              v-if="isLoadingCurrentAccount"
+              class="loading loading-spinner loading-sm"
+            ></span>
+            {{
+              isLoadingCurrentAccount
+                ? 'Loading current account'
+                : 'Load current account addons'
+            }}
+          </button>
+        </div>
+        <p class="mt-3 text-xs opacity-70">
+          Preset loading generates a new setup from the fields above. Current
+          account loading imports the addons already installed in your account
+          into the customization list below.
+        </p>
       </fieldset>
 
       <!-- Step 9: Customize Addons -->
@@ -1131,6 +1277,10 @@ watch(
         <legend class="text-sm">
           {{ $t('step9_customize_addons') }}
         </legend>
+        <p v-if="addons.length === 0" class="mb-3 text-sm opacity-70">
+          No addons loaded yet. Load a preset or load the current account addons
+          first.
+        </p>
         <draggable
           :list="addons"
           item-key="transportUrl"
