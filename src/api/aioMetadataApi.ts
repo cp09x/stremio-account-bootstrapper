@@ -1,4 +1,5 @@
 import { getRequest, postRequest } from '../utils/http';
+import { withTransientRetry } from './aioStreamsApi';
 
 const API_BASE_URL = 'https://aiometadata.elfhosted.com';
 
@@ -8,9 +9,8 @@ type AIOMetadataResponse = {
 };
 
 export const getAddonConfig = async (config: object): Promise<any> => {
-  const response = (await postRequest(
-    `${API_BASE_URL}/api/config/save`,
-    config
+  const response = (await withTransientRetry(() =>
+    postRequest(`${API_BASE_URL}/api/config/save`, config)
   )) as AIOMetadataResponse | null | undefined;
 
   if (
@@ -25,7 +25,9 @@ export const getAddonConfig = async (config: object): Promise<any> => {
     throw new Error('AIOMetadata returned an error or missing install URL');
   }
 
-  const responseManifest = await getRequest(response.installUrl);
+  const responseManifest = await withTransientRetry(() =>
+    getRequest(response.installUrl as string)
+  );
 
   if (!responseManifest) {
     throw new Error('AIOMetadata manifest request returned no data');
