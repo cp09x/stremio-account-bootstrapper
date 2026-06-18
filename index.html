@@ -6,6 +6,28 @@
     <meta name="description" content="Stremio Account Bootstrapper" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Stremio Account Bootstrapper</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Lora:wght@500;600;700&family=Raleway:wght@300;400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <script>
+      (function () {
+        try {
+          var saved = localStorage.getItem('theme');
+          var theme =
+            saved ||
+            (window.matchMedia &&
+            window.matchMedia('(prefers-color-scheme: dark)').matches
+              ? 'mossdark'
+              : 'paper');
+          document.documentElement.setAttribute('data-theme', theme);
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'paper');
+        }
+      })();
+    </script>
     <script
       data-goatcounter="https://stremio-account-bootstrapper.goatcounter.com/count"
       async
