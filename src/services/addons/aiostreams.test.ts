@@ -90,6 +90,8 @@ describe('configureAioStreams', () => {
       useMetadataRuntime: false
     });
     expect(mocks.submittedConfig.config.excludeUncached).toBe(true);
+    expect(mocks.submittedConfig.config.preferredStreamTypes).toBeUndefined();
+    expect(mocks.submittedConfig.config.cacheAndPlay).toBeUndefined();
     expect(mocks.submittedConfig.config.excludedResolutions).toContain('576p');
     expect(mocks.submittedConfig.config.coreFilter).toBe('extended');
     expect(mocks.submittedConfig.config.miscPassthrough).toMatchObject({
@@ -136,5 +138,35 @@ describe('configureAioStreams', () => {
       { name: 'stream', types: ['movie', 'series'] }
     ]);
     expect(presetConfig.aiostreams.manifest.catalogs).toEqual([]);
+  });
+
+  it('prefers TorBox Usenet/Library copies and enables cacheAndPlay for torrents when TorBox is configured', async () => {
+    const presetConfig = createPreset();
+
+    await configureAioStreams(presetConfig, {
+      language: 'en',
+      no4k: false,
+      cached: false,
+      limit: 10,
+      size: 30,
+      debridEntries: [
+        { service: 'torbox', key: '123e4567-e89b-12d3-a456-426614174000' }
+      ],
+      debridServiceName: 'TB',
+      preset: 'allinone',
+      password: 'secret',
+      advanced: {},
+      minQuality: 'any',
+      excludeAnime: false
+    });
+
+    expect(mocks.submittedConfig.config.preferredStreamTypes).toEqual([
+      'usenet',
+      'debrid'
+    ]);
+    expect(mocks.submittedConfig.config.cacheAndPlay).toEqual({
+      enabled: true,
+      streamTypes: ['usenet', 'torrent']
+    });
   });
 });

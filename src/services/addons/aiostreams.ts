@@ -171,6 +171,7 @@ export async function configureAioStreams(
     excludeAnime
   } = context;
   const isDebridUser = debridEntries.length > 0;
+  const hasTorbox = debridEntries.some((debrid) => debrid.service === 'torbox');
 
   // Fetch template
   let template: any;
@@ -278,6 +279,15 @@ export async function configureAioStreams(
       }
     }),
     ...(cached && { excludeUncached: true }),
+    // TorBox's instant torrent cache can return the wrong file from multi-file
+    // packs (.nfo/sample/screenshot instead of the video), which surfaces in
+    // Stremio as "stream failed to load". Prefer TorBox's reliable
+    // Usenet/Library copies over the flaky torrent cache, and let cacheAndPlay
+    // pull torrents so the correct file is extracted before playback.
+    ...(hasTorbox && {
+      preferredStreamTypes: ['usenet', 'debrid'],
+      cacheAndPlay: { enabled: true, streamTypes: ['usenet', 'torrent'] }
+    }),
     formatter: {
       id: 'lightgdrive'
     },
