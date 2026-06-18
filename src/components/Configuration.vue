@@ -1,21 +1,29 @@
 <script setup>
 import { ref, computed, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { Buffer } from 'buffer';
 import draggable from 'vuedraggable';
 import AddonItem from './AddonItem.vue';
 import DynamicForm from './DynamicForm.vue';
-import _ from 'lodash';
 import { QuestionMarkCircleIcon } from '@heroicons/vue/24/outline';
 import { addNotification } from '../composables/useNotifications';
 import { useAnalytics } from '../composables/useAnalytics';
 import { isValidApiKey, debridServicesInfo } from '../utils/debrid.ts';
 import { isValidManifestUrl } from '../utils/url.ts';
-import { pullProfiles } from '../api/platformApi';
+import {
+  getAddonCollection,
+  setAddonCollection,
+  pullProfiles
+} from '../api/platformApi';
+import { diffAddonCollections } from '../utils/addonDiff.ts';
 import {
   buildPresetService,
   loadPresetService
 } from '../services/presetService.ts';
+import {
+  buildBuilderSettingsFilename,
+  createBuilderSettingsBackup,
+  parseBuilderSettingsBackup
+} from '../services/builderSettingsBackup.ts';
 import { generatePassword } from '../utils/password.ts';
 import { Tooltip as VTooltip } from 'floating-vue';
 import 'floating-vue/dist/style.css';
@@ -31,6 +39,14 @@ const props = defineProps({
   platform: {
     type: String,
     default: 'stremio'
+  },
+  restoredAccountSnapshot: {
+    type: Object,
+    default: null
+  },
+  importedBuilderSettings: {
+    type: Object,
+    default: null
   }
 });
 
@@ -42,17 +58,16 @@ let dragging = false;
 let addons = ref([]);
 let customAddons = ref(['']);
 let extras = ref([]);
-let options = ref([]);
+let options = ref(['cached', 'min720p', 'excludeAnime']);
 let maxSize = ref('');
 let isSyncButtonEnabled = ref(false);
+let isLoadingCurrentAccount = ref(false);
 let isLoadingPreset = ref(false);
 let isSyncAddons = ref(false);
 let language = ref('en');
-let preset = ref('standard');
+let preset = ref('allinone');
 
-let debridService = ref('');
 let debridEntries = ref([{ service: '', key: '' }]);
-let debridServiceName = '';
 let collections = [];
 let nuvioProfiles = ref([]);
 let selectedNuvioProfileId = ref(1);
@@ -60,6 +75,18 @@ let isLoadingNuvioProfiles = ref(false);
 
 let isPasswordModalVisible = ref(false);
 let generatedPassword = ref(generatePassword());
+let passwordAcknowledged = ref(false);
+let currentAccountSnapshot = ref(null);
+
+let isSyncConfirmVisible = ref(false);
+let isPreparingSync = ref(false);
+let syncDiff = ref(null);
+let lastSyncSnapshot = ref(null);
+let isUndoingSync = ref(false);
+let isUndoConfirmVisible = ref(false);
+let builderSettingsFileInputRef = ref(null);
+let lastBuilderSettingsImport = ref(null);
+let addonBuildErrors = ref([]);
 
 const MAX_CUSTOM_ADDONS = 10;
 const MAX_DEBRID_ENTRIES = 5;
@@ -88,16 +115,122 @@ const hasDebridSelected = computed(() =>
   debridEntries.value.some((e) => e.service)
 );
 
-let torrentioConfig = '';
-let peerflixConfig = '';
+const accountSnapshot = computed(() => {
+  const snapshot =
+    currentAccountSnapshot.value || props.restoredAccountSnapshot;
+
+  if (!snapshot) {
+    return null;
+  }
+
+  if (snapshot.platform && snapshot.platform !== props.platform) {
+    return null;
+  }
+
+  return snapshot;
+});
+
 let isEditModalVisible = ref(false);
 let currentManifest = ref({});
 let currentEditIdx = ref(null);
 
 let advancedOptions = ref({
   rpdbKey: '',
-  tmdbKey: ''
+  tmdbKey: '',
+  tmdbAccessToken: '',
+  tvdbKey: '',
+  fanartKey: '',
+  geminiKey: '',
+  topPosterKey: '',
+  mdblistKey: '',
+  publicMetaDbKey: ''
 });
+
+function currentBuilderSettings() {
+  return {
+    preset: preset.value,
+    language: language.value,
+    debridEntries: debridEntries.value.map((entry) => ({ ...entry })),
+    extras: [...extras.value],
+    customAddons: [...customAddons.value],
+    options: [...options.value],
+    maxSize: maxSize.value,
+    advancedOptions: { ...advancedOptions.value },
+    password: generatedPassword.value
+  };
+}
+
+function exportBuilderSettings() {
+  const backup = createBuilderSettingsBackup({
+    settings: currentBuilderSettings()
+  });
+  const blob = new Blob([JSON.stringify(backup, null, 2)], {
+    type: 'application/json'
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = buildBuilderSettingsFilename();
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  addNotification('Builder settings exported', 'success');
+}
+
+function openBuilderSettingsFilePicker() {
+  builderSettingsFileInputRef.value?.click();
+}
+
+function applyBuilderSettings(settings, source = {}) {
+  preset.value = settings.preset;
+  language.value = settings.language;
+  debridEntries.value =
+    settings.debridEntries.length > 0
+      ? settings.debridEntries.map((entry) => ({ ...entry }))
+      : [{ service: '', key: '' }];
+  extras.value = [...settings.extras];
+  customAddons.value =
+    settings.customAddons.length > 0 ? [...settings.customAddons] : [''];
+  options.value = [...settings.options];
+  maxSize.value = settings.maxSize;
+  advancedOptions.value = {
+    ...advancedOptions.value,
+    ...settings.advancedOptions
+  };
+  if (settings.password) {
+    generatedPassword.value = settings.password;
+  }
+  isSyncButtonEnabled.value = false;
+  lastBuilderSettingsImport.value = {
+    fileName: source.fileName || 'Builder settings',
+    importedAt: source.importedAt || new Date().toISOString(),
+    debridServices: debridEntries.value
+      .filter((entry) => entry.service)
+      .map((entry) => entry.service)
+  };
+  addNotification('Builder settings applied to the form', 'success');
+}
+
+async function importBuilderSettingsFile(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  try {
+    const parsed = JSON.parse(await file.text());
+    applyBuilderSettings(parseBuilderSettingsBackup(parsed), {
+      fileName: file.name
+    });
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error
+        ? error.message
+        : 'Failed to import builder settings';
+    addNotification(errorMessage, 'error');
+  } finally {
+    event.target.value = '';
+  }
+}
 
 async function loadUserAddons() {
   const key = props.authKey;
@@ -114,11 +247,7 @@ async function loadUserAddons() {
   try {
     const {
       selectedAddons,
-      presetConfig: builtPresetConfig,
-      debridServiceName: builtDebridServiceName,
       collections: builtCollections = [],
-      torrentioConfig: builtTorrentioConfig,
-      peerflixConfig: builtPeerflixConfig,
       errors: presetErrors = []
     } = await buildPresetService({
       preset: preset.value,
@@ -128,20 +257,17 @@ async function loadUserAddons() {
       options: options.value,
       maxSize: maxSize.value,
       advanced: {
-        rpdbKey: advancedOptions.value.rpdbKey,
-        tmdbKey: advancedOptions.value.tmdbKey
+        ...advancedOptions.value
       },
       debridEntries: debridEntries.value,
-      isDebridApiKeyValid: isDebridApiKeyValid.value,
       password: generatedPassword.value,
       platform: props.platform
     });
 
     addons.value = selectedAddons;
-    debridServiceName = builtDebridServiceName;
     collections = builtCollections;
-    torrentioConfig = builtTorrentioConfig;
-    peerflixConfig = builtPeerflixConfig;
+    isSyncButtonEnabled.value = selectedAddons.length > 0;
+    addonBuildErrors.value = [...presetErrors];
 
     if (presetErrors.length > 0) {
       addNotification(presetErrors.join('\n'), 'warning');
@@ -151,13 +277,53 @@ async function loadUserAddons() {
     const errorMessage =
       error instanceof Error ? error.message : t('failed_fetching_presets');
     addNotification(errorMessage, 'error');
+    addons.value = [];
+    collections = [];
+    isSyncButtonEnabled.value = false;
+    addonBuildErrors.value = [];
   } finally {
-    isSyncButtonEnabled.value = true;
     isLoadingPreset.value = false;
   }
 }
 
 async function syncUserAddons() {
+  const key = props.authKey;
+  if (!key) {
+    console.error('No auth key provided');
+    return;
+  }
+
+  isPreparingSync.value = true;
+
+  try {
+    const response = await getAddonCollection(
+      props.platform,
+      key,
+      selectedNuvioProfileId.value ?? 1
+    );
+    const currentAddons = extractAddonList(response);
+
+    lastSyncSnapshot.value = currentAddons;
+    syncDiff.value = diffAddonCollections(currentAddons, addons.value);
+    isSyncConfirmVisible.value = true;
+    document.body.classList.add('modal-open');
+  } catch (error) {
+    console.error('Failed to load current account before sync', error);
+    const errorMessage =
+      error instanceof Error ? error.message : t('sync_diff_load_failed');
+    addNotification(errorMessage, 'error');
+  } finally {
+    isPreparingSync.value = false;
+  }
+}
+
+function cancelSyncConfirm() {
+  isSyncConfirmVisible.value = false;
+  syncDiff.value = null;
+  document.body.classList.remove('modal-open');
+}
+
+async function confirmSyncUserAddons() {
   const { track } = useAnalytics();
   const key = props.authKey;
   if (!key) {
@@ -165,6 +331,8 @@ async function syncUserAddons() {
     return;
   }
 
+  isSyncConfirmVisible.value = false;
+  document.body.classList.remove('modal-open');
   isSyncAddons.value = true;
   console.log('Syncing addons...');
 
@@ -174,7 +342,7 @@ async function syncUserAddons() {
       key,
       platform: props.platform,
       collections,
-      profileId: selectedNuvioProfileId.value || 1
+      profileId: selectedNuvioProfileId.value ?? 1
     });
     addNotification(t('sync_complete'), 'success');
     track('sync_stremio_click', {
@@ -183,10 +351,16 @@ async function syncUserAddons() {
         platform: props.platform,
         language: language.value,
         preset: preset.value,
-        debrid: debridService.value || ''
+        debrid: debridEntries.value
+          .filter((entry) => entry.service)
+          .map((entry) => entry.service)
+          .join(',')
       }
     });
-    isPasswordModalVisible.value = preset.value !== 'factory';
+    if (preset.value !== 'factory') {
+      passwordAcknowledged.value = false;
+      isPasswordModalVisible.value = true;
+    }
     console.log('Sync complete: ', data);
   } catch (error) {
     const errorMessage =
@@ -195,10 +369,58 @@ async function syncUserAddons() {
     console.error('Sync failed', error);
   } finally {
     isSyncAddons.value = false;
+    syncDiff.value = null;
+  }
+}
+
+function requestUndoLastSync() {
+  if (!lastSyncSnapshot.value) return;
+  isUndoConfirmVisible.value = true;
+  document.body.classList.add('modal-open');
+}
+
+function cancelUndoConfirm() {
+  isUndoConfirmVisible.value = false;
+  document.body.classList.remove('modal-open');
+}
+
+async function confirmUndoLastSync() {
+  const key = props.authKey;
+  const snapshot = lastSyncSnapshot.value;
+  if (!key || !snapshot) {
+    isUndoConfirmVisible.value = false;
+    document.body.classList.remove('modal-open');
+    return;
+  }
+
+  isUndoConfirmVisible.value = false;
+  document.body.classList.remove('modal-open');
+  isUndoingSync.value = true;
+
+  try {
+    const res = await setAddonCollection(
+      props.platform,
+      snapshot,
+      key,
+      selectedNuvioProfileId.value ?? 1
+    );
+    if (res?.result?.success === false) {
+      throw new Error(res?.result?.error || t('undo_sync_failed'));
+    }
+    addNotification(t('undo_sync_complete'), 'success');
+    lastSyncSnapshot.value = null;
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : t('undo_sync_failed');
+    addNotification(errorMessage, 'error');
+    console.error('Undo sync failed', error);
+  } finally {
+    isUndoingSync.value = false;
   }
 }
 
 function closePasswordModal() {
+  if (!passwordAcknowledged.value) return;
   isPasswordModalVisible.value = false;
   document.body.classList.remove('modal-open');
 }
@@ -208,8 +430,84 @@ function copyPassword() {
   addNotification(t('password_copied'), 'success');
 }
 
+function downloadPassword() {
+  const blob = new Blob([generatedPassword.value], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'stremio-addon-password.txt';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 function removeAddon(idx) {
   addons.value.splice(idx, 1);
+}
+
+function getAddonName(addon) {
+  return addon?.manifest?.name || addon?.name || 'Unknown addon';
+}
+
+function extractAddonList(response) {
+  if (Array.isArray(response)) {
+    return response;
+  }
+
+  if (Array.isArray(response?.result?.addons)) {
+    return response.result.addons;
+  }
+
+  if (Array.isArray(response?.addons)) {
+    return response.addons;
+  }
+
+  return [];
+}
+
+async function loadCurrentAccountAddons() {
+  const key = props.authKey;
+
+  if (!key) {
+    return;
+  }
+
+  isLoadingCurrentAccount.value = true;
+
+  try {
+    const response = await getAddonCollection(
+      props.platform,
+      key,
+      selectedNuvioProfileId.value ?? 1
+    );
+    const currentAddons = extractAddonList(response);
+
+    addons.value = currentAddons;
+    collections = [];
+    isSyncButtonEnabled.value = currentAddons.length > 0;
+    currentAccountSnapshot.value = {
+      addonCount: currentAddons.length,
+      addonNames: currentAddons.map(getAddonName),
+      fileName: 'Current account',
+      platform: props.platform,
+      sourceFormat: 'account'
+    };
+
+    addNotification(
+      `Loaded ${currentAddons.length} current account addons`,
+      'success'
+    );
+  } catch (error) {
+    console.error('Failed to load current account addons', error);
+    const errorMessage =
+      error instanceof Error
+        ? error.message
+        : 'Failed to load current account addons';
+    addNotification(errorMessage, 'error');
+  } finally {
+    isLoadingCurrentAccount.value = false;
+  }
 }
 
 // functions to manage dynamic custom inputs
@@ -250,7 +548,7 @@ function saveManifestEdit(updatedManifest) {
     addons.value[currentEditIdx.value].manifest = updatedManifest;
     closeEditModal();
   } catch (e) {
-    addNotification(t('failed_update_manifest', 'error'));
+    addNotification(t('failed_update_manifest'), 'error');
   }
 }
 
@@ -322,7 +620,7 @@ async function loadNuvioProfiles() {
   } catch (error) {
     console.error('Failed to load profiles', error);
     resetNuvioProfiles();
-    addNotification(t('profiles_load_failed'), 'error');
+    addNotification(t('profile_load_failed'), 'error');
   } finally {
     isLoadingNuvioProfiles.value = false;
   }
@@ -334,6 +632,20 @@ watch(
     if (nextPlatform !== previousPlatform) {
       resetNuvioProfiles();
     }
+  }
+);
+
+watch(
+  () => props.importedBuilderSettings,
+  (payload) => {
+    if (!payload?.settings) {
+      return;
+    }
+
+    applyBuilderSettings(payload.settings, {
+      fileName: payload.fileName,
+      importedAt: payload.importedAt
+    });
   }
 );
 
@@ -365,6 +677,116 @@ watch(
     <h3 class="text-2xl font-bold mb-6">
       {{ $t('configure') }}
     </h3>
+
+    <div class="mb-4 rounded-lg border border-base-300 bg-base-100 p-4">
+      <div
+        class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between"
+      >
+        <div class="space-y-1">
+          <p class="text-base font-semibold">Builder settings</p>
+          <p class="text-sm opacity-75">
+            Export or import the editable form state: debrid keys, advanced API
+            keys, preset, language, filters, and custom addon URLs.
+          </p>
+          <div
+            v-if="lastBuilderSettingsImport"
+            class="mt-3 flex flex-wrap items-center gap-2 text-sm"
+          >
+            <span class="badge badge-success">Applied</span>
+            <span>{{ lastBuilderSettingsImport.fileName }}</span>
+            <span
+              v-for="service in lastBuilderSettingsImport.debridServices"
+              :key="service"
+              class="badge badge-outline"
+            >
+              {{ debridServicesInfo[service]?.label || service }}
+            </span>
+          </div>
+        </div>
+
+        <div class="flex shrink-0 flex-col gap-2 sm:flex-row">
+          <button
+            type="button"
+            class="btn btn-outline"
+            @click="exportBuilderSettings"
+          >
+            Export settings
+          </button>
+          <button
+            type="button"
+            class="btn btn-primary"
+            @click="openBuilderSettingsFilePicker"
+          >
+            Import settings
+          </button>
+          <input
+            ref="builderSettingsFileInputRef"
+            type="file"
+            accept=".json,application/json"
+            class="hidden"
+            @change="importBuilderSettingsFile"
+          />
+        </div>
+      </div>
+      <p class="mt-3 text-xs text-warning">
+        Settings files include visible API keys. Store them like password files.
+      </p>
+    </div>
+
+    <div
+      v-if="accountSnapshot"
+      class="mb-4 rounded-lg border border-info/30 bg-info/10 p-4"
+    >
+      <p class="font-semibold text-info">Account snapshot available</p>
+      <p class="mt-1 text-sm">
+        {{ accountSnapshot.addonCount }} addons were
+        {{
+          accountSnapshot.sourceFormat === 'account'
+            ? 'loaded from the current account'
+            : 'restored to the account'
+        }}.
+      </p>
+      <div
+        v-if="accountSnapshot.addonNames?.length"
+        class="mt-3 flex flex-wrap gap-2"
+      >
+        <span
+          v-for="name in accountSnapshot.addonNames.slice(0, 10)"
+          :key="name"
+          class="badge badge-outline"
+        >
+          {{ name }}
+        </span>
+        <span
+          v-if="accountSnapshot.addonNames.length > 10"
+          class="badge badge-ghost"
+        >
+          +{{ accountSnapshot.addonNames.length - 10 }} more
+        </span>
+      </div>
+      <p class="mt-3 text-xs text-warning">
+        The fields below are a preset builder. They are not automatically
+        reverse-filled from restored addon URLs or private API keys.
+      </p>
+      <p class="mt-1 text-xs text-warning">
+        Restored API keys stay embedded in the installed private addon URLs.
+        Fill the fields only when you want to generate and overwrite a new
+        preset.
+      </p>
+      <div
+        v-if="accountSnapshot.missingAddonNames?.length"
+        class="mt-3 rounded border border-warning/40 bg-warning/10 p-3 text-sm"
+      >
+        <p class="font-semibold text-warning">
+          Missing after account verification
+        </p>
+        <ul class="mt-2 list-disc pl-5">
+          <li v-for="name in accountSnapshot.missingAddonNames" :key="name">
+            {{ name }}
+          </li>
+        </ul>
+      </div>
+    </div>
 
     <form class="space-y-4" onsubmit="return false;">
       <!-- Step 1: Select Preset -->
@@ -891,6 +1313,24 @@ watch(
             <span class="label-text ml-2">{{ $t('cached_only_debrid') }}</span>
           </label>
           <label class="label cursor-pointer">
+            <input
+              type="checkbox"
+              value="min720p"
+              v-model="options"
+              class="checkbox checkbox-primary"
+            />
+            <span class="label-text ml-2">{{ $t('minimum_720p') }}</span>
+          </label>
+          <label class="label cursor-pointer">
+            <input
+              type="checkbox"
+              value="excludeAnime"
+              v-model="options"
+              class="checkbox checkbox-primary"
+            />
+            <span class="label-text ml-2">{{ $t('exclude_anime') }}</span>
+          </label>
+          <label class="label cursor-pointer">
             <span class="label-text">{{ $t('max_size') }}</span>
             <select v-model="maxSize" class="select select-bordered w-32">
               <option :value="''">{{ $t('no_size_limit') }}</option>
@@ -985,6 +1425,104 @@ watch(
               <QuestionMarkCircleIcon class="h-5 w-5 text-primary" />
             </a>
           </div>
+          <div class="flex items-center gap-2">
+            <input
+              v-model="advancedOptions.tmdbAccessToken"
+              class="input input-bordered w-full"
+              :placeholder="$t('enter_tmdb_access_token')"
+            />
+            <a
+              target="_blank"
+              href="https://www.themoviedb.org/settings/api"
+              class="inline-block align-middle"
+            >
+              <QuestionMarkCircleIcon class="h-5 w-5 text-primary" />
+            </a>
+          </div>
+          <div class="flex items-center gap-2">
+            <input
+              v-model="advancedOptions.tvdbKey"
+              class="input input-bordered w-full"
+              :placeholder="$t('enter_tvdb_key')"
+            />
+            <a
+              target="_blank"
+              href="https://thetvdb.com/api-information"
+              class="inline-block align-middle"
+            >
+              <QuestionMarkCircleIcon class="h-5 w-5 text-primary" />
+            </a>
+          </div>
+          <div class="flex items-center gap-2">
+            <input
+              v-model="advancedOptions.fanartKey"
+              class="input input-bordered w-full"
+              :placeholder="$t('enter_fanart_key')"
+            />
+            <a
+              target="_blank"
+              href="https://fanart.tv"
+              class="inline-block align-middle"
+            >
+              <QuestionMarkCircleIcon class="h-5 w-5 text-primary" />
+            </a>
+          </div>
+          <div class="flex items-center gap-2">
+            <input
+              v-model="advancedOptions.geminiKey"
+              class="input input-bordered w-full"
+              :placeholder="$t('enter_gemini_key')"
+            />
+            <a
+              target="_blank"
+              href="https://aistudio.google.com"
+              class="inline-block align-middle"
+            >
+              <QuestionMarkCircleIcon class="h-5 w-5 text-primary" />
+            </a>
+          </div>
+          <div class="flex items-center gap-2">
+            <input
+              v-model="advancedOptions.topPosterKey"
+              class="input input-bordered w-full"
+              :placeholder="$t('enter_top_poster_key')"
+            />
+            <a
+              target="_blank"
+              href="https://api.top-streaming.stream/user/dashboard"
+              class="inline-block align-middle"
+            >
+              <QuestionMarkCircleIcon class="h-5 w-5 text-primary" />
+            </a>
+          </div>
+          <div class="flex items-center gap-2">
+            <input
+              v-model="advancedOptions.mdblistKey"
+              class="input input-bordered w-full"
+              :placeholder="$t('enter_mdblist_key')"
+            />
+            <a
+              target="_blank"
+              href="https://mdblist.com/preferences"
+              class="inline-block align-middle"
+            >
+              <QuestionMarkCircleIcon class="h-5 w-5 text-primary" />
+            </a>
+          </div>
+          <div class="flex items-center gap-2">
+            <input
+              v-model="advancedOptions.publicMetaDbKey"
+              class="input input-bordered w-full"
+              :placeholder="$t('enter_publicmetadb_key')"
+            />
+            <a
+              target="_blank"
+              href="https://publicmetadb.com"
+              class="inline-block align-middle"
+            >
+              <QuestionMarkCircleIcon class="h-5 w-5 text-primary" />
+            </a>
+          </div>
         </div>
       </fieldset>
 
@@ -993,23 +1531,47 @@ watch(
         <legend class="text-sm">
           {{ $t('step8_load_preset') }}
         </legend>
-        <button
-          class="btn btn-primary"
-          @click="loadUserAddons"
-          :disabled="
-            !props.authKey ||
-            (debridService ? !isDebridApiKeyValid : false) ||
-            isLoadingPreset
-          "
-        >
-          <span
-            v-if="isLoadingPreset"
-            class="loading loading-spinner loading-sm"
-          ></span>
-          {{
-            isLoadingPreset ? $t('loading_addons') : $t('load_addons_preset')
-          }}
-        </button>
+        <div class="flex flex-col gap-3 md:flex-row md:items-center">
+          <button
+            class="btn btn-primary"
+            @click="loadUserAddons"
+            :disabled="
+              !props.authKey ||
+              (hasDebridSelected && !isDebridApiKeyValid) ||
+              isLoadingPreset
+            "
+          >
+            <span
+              v-if="isLoadingPreset"
+              class="loading loading-spinner loading-sm"
+            ></span>
+            {{
+              isLoadingPreset ? $t('loading_addons') : $t('load_addons_preset')
+            }}
+          </button>
+
+          <button
+            type="button"
+            class="btn btn-outline"
+            @click="loadCurrentAccountAddons"
+            :disabled="!props.authKey || isLoadingCurrentAccount"
+          >
+            <span
+              v-if="isLoadingCurrentAccount"
+              class="loading loading-spinner loading-sm"
+            ></span>
+            {{
+              isLoadingCurrentAccount
+                ? 'Loading current account'
+                : 'Load current account addons'
+            }}
+          </button>
+        </div>
+        <p class="mt-3 text-xs opacity-70">
+          Preset loading generates a new setup from the fields above. Current
+          account loading imports the addons already installed in your account
+          into the customization list below.
+        </p>
       </fieldset>
 
       <!-- Step 9: Customize Addons -->
@@ -1017,6 +1579,22 @@ watch(
         <legend class="text-sm">
           {{ $t('step9_customize_addons') }}
         </legend>
+        <p v-if="addons.length === 0" class="mb-3 text-sm opacity-70">
+          No addons loaded yet. Load a preset or load the current account addons
+          first.
+        </p>
+        <div
+          v-if="addonBuildErrors.length > 0"
+          class="alert alert-warning mb-3 flex-col items-start"
+          role="alert"
+        >
+          <p class="font-semibold">{{ $t('addon_build_errors_title') }}</p>
+          <ul class="list-disc pl-5 text-sm">
+            <li v-for="(error, idx) in addonBuildErrors" :key="idx">
+              {{ error }}
+            </li>
+          </ul>
+        </div>
         <draggable
           :list="addons"
           item-key="transportUrl"
@@ -1053,31 +1631,169 @@ watch(
         <legend class="text-sm">
           {{ $t('step10_bootstrap_account') }}
         </legend>
-        <button
-          type="button"
-          class="btn btn-primary"
-          :disabled="!isSyncButtonEnabled || isLoadingPreset || isSyncAddons"
-          @click="syncUserAddons"
-        >
-          <span
-            v-if="isSyncAddons"
-            class="loading loading-spinner loading-sm"
-          ></span>
-          {{
-            isSyncAddons
-              ? $t('sync_addons')
-              : $t('sync_to_stremio', { platform: platformLabel })
-          }}
-        </button>
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <button
+            type="button"
+            class="btn btn-primary"
+            :disabled="
+              !isSyncButtonEnabled ||
+              isLoadingPreset ||
+              isSyncAddons ||
+              isPreparingSync ||
+              isUndoingSync
+            "
+            @click="syncUserAddons"
+          >
+            <span
+              v-if="isSyncAddons || isPreparingSync"
+              class="loading loading-spinner loading-sm"
+            ></span>
+            {{
+              isSyncAddons
+                ? $t('sync_addons')
+                : isPreparingSync
+                  ? $t('sync_diff_loading')
+                  : $t('sync_to_stremio', { platform: platformLabel })
+            }}
+          </button>
+
+          <button
+            type="button"
+            class="btn btn-outline"
+            :disabled="!lastSyncSnapshot || isUndoingSync || isSyncAddons"
+            @click="requestUndoLastSync"
+          >
+            <span
+              v-if="isUndoingSync"
+              class="loading loading-spinner loading-sm"
+            ></span>
+            {{ isUndoingSync ? $t('undoing_sync') : $t('undo_last_sync') }}
+          </button>
+        </div>
+        <p class="mt-3 text-xs opacity-70">
+          {{ $t('undo_last_sync_hint') }}
+        </p>
       </fieldset>
     </form>
   </section>
+
+  <!-- Pre-sync diff confirmation modal -->
+  <dialog v-if="isSyncConfirmVisible" class="modal modal-open">
+    <div class="modal-box w-11/12 max-w-2xl">
+      <button
+        class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
+        @click="cancelSyncConfirm"
+      >
+        ✕
+      </button>
+      <h3 class="font-bold text-lg mb-2">{{ $t('sync_confirm_title') }}</h3>
+      <p class="mb-4 text-sm opacity-80">
+        {{ $t('sync_confirm_message', { platform: platformLabel }) }}
+      </p>
+
+      <div v-if="syncDiff" class="space-y-4">
+        <div class="flex flex-wrap gap-2">
+          <span class="badge badge-success">
+            {{ $t('sync_diff_added') }}: {{ syncDiff.added.length }}
+          </span>
+          <span class="badge badge-error">
+            {{ $t('sync_diff_removed') }}: {{ syncDiff.removed.length }}
+          </span>
+          <span class="badge badge-ghost">
+            {{ $t('sync_diff_kept') }}: {{ syncDiff.kept.length }}
+          </span>
+          <span v-if="syncDiff.reordered" class="badge badge-warning">
+            {{ $t('sync_diff_reordered') }}
+          </span>
+        </div>
+
+        <div v-if="syncDiff.added.length > 0">
+          <p class="font-semibold text-success">{{ $t('sync_diff_added') }}</p>
+          <ul class="mt-1 list-disc pl-5 text-sm">
+            <li v-for="name in syncDiff.added" :key="`add-${name}`">
+              {{ name }}
+            </li>
+          </ul>
+        </div>
+
+        <div v-if="syncDiff.removed.length > 0">
+          <p class="font-semibold text-error">{{ $t('sync_diff_removed') }}</p>
+          <ul class="mt-1 list-disc pl-5 text-sm">
+            <li v-for="name in syncDiff.removed" :key="`rem-${name}`">
+              {{ name }}
+            </li>
+          </ul>
+        </div>
+
+        <div v-if="syncDiff.kept.length > 0">
+          <p class="font-semibold opacity-80">{{ $t('sync_diff_kept') }}</p>
+          <div class="mt-1 flex flex-wrap gap-2">
+            <span
+              v-for="name in syncDiff.kept.slice(0, 12)"
+              :key="`kept-${name}`"
+              class="badge badge-outline"
+            >
+              {{ name }}
+            </span>
+            <span v-if="syncDiff.kept.length > 12" class="badge badge-ghost">
+              +{{ syncDiff.kept.length - 12 }} {{ $t('more') }}
+            </span>
+          </div>
+        </div>
+
+        <p
+          v-if="
+            syncDiff.added.length === 0 &&
+            syncDiff.removed.length === 0 &&
+            !syncDiff.reordered
+          "
+          class="text-sm text-warning"
+        >
+          {{ $t('sync_diff_no_changes') }}
+        </p>
+      </div>
+
+      <div class="modal-action">
+        <button class="btn" @click="cancelSyncConfirm">
+          {{ $t('cancel') }}
+        </button>
+        <button class="btn btn-primary" @click="confirmSyncUserAddons">
+          {{ $t('sync_confirm_apply') }}
+        </button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Undo last sync confirmation modal -->
+  <dialog v-if="isUndoConfirmVisible" class="modal modal-open">
+    <div class="modal-box">
+      <button
+        class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
+        @click="cancelUndoConfirm"
+      >
+        ✕
+      </button>
+      <h3 class="font-bold text-lg mb-2">{{ $t('undo_confirm_title') }}</h3>
+      <p class="mb-4 text-sm opacity-80">
+        {{ $t('undo_confirm_message', { platform: platformLabel }) }}
+      </p>
+      <div class="modal-action">
+        <button class="btn" @click="cancelUndoConfirm">
+          {{ $t('cancel') }}
+        </button>
+        <button class="btn btn-primary" @click="confirmUndoLastSync">
+          {{ $t('undo_confirm_apply') }}
+        </button>
+      </div>
+    </div>
+  </dialog>
 
   <!-- Password Modal -->
   <dialog v-if="isPasswordModalVisible" class="modal modal-open">
     <div class="modal-box">
       <button
         class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
+        :disabled="!passwordAcknowledged"
         @click="closePasswordModal"
       >
         ✕
@@ -1089,11 +1805,28 @@ watch(
       >
         {{ generatedPassword }}
       </div>
-      <div class="modal-action">
+      <div class="flex flex-wrap gap-2 mb-4">
         <button class="btn btn-primary" @click="copyPassword">
           {{ $t('password_copy') }}
         </button>
-        <button class="btn" @click="closePasswordModal">
+        <button class="btn" @click="downloadPassword">
+          {{ $t('password_download') }}
+        </button>
+      </div>
+      <label class="label cursor-pointer justify-start gap-2 mb-2">
+        <input
+          v-model="passwordAcknowledged"
+          type="checkbox"
+          class="checkbox checkbox-sm"
+        />
+        <span class="label-text">{{ $t('password_acknowledge') }}</span>
+      </label>
+      <div class="modal-action">
+        <button
+          class="btn"
+          :disabled="!passwordAcknowledged"
+          @click="closePasswordModal"
+        >
           {{ $t('close') }}
         </button>
       </div>

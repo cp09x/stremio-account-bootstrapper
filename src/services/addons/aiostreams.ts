@@ -5,8 +5,18 @@ import {
 import type { AddonConfigContext } from './types';
 import { getLanguageName } from '../../utils/language';
 import { convertToBytes } from '../../utils/sizeConverters';
-import { merge } from 'lodash';
+import _ from 'lodash';
 import { applyTemplateConditionals } from '../../utils/templateConditionals';
+import {
+  applyManifestContentPreferences,
+  applyStreamOnlyManifest,
+  getExcludedResolutions
+} from '../../utils/streamPreferences';
+
+// Asymmetry: cacheAndPlay.streamTypes only accepts 'usenet'|'torrent' (NOT
+// 'debrid', unlike preferredStreamTypes) — passing 'debrid' makes AIOStreams
+// reject the whole config with a 400.
+const CACHE_AND_PLAY_STREAM_TYPES = ['usenet', 'torrent'] as const;
 
 function addLanguageSpecificAddons(
   presets: any[],
@@ -105,6 +115,16 @@ function getWebStreamrConfig(language: string): any {
   };
 }
 
+function restrictPresetMediaTypes(presets: any[]): void {
+  if (!Array.isArray(presets)) return;
+
+  for (const preset of presets) {
+    if (Array.isArray(preset?.options?.mediaTypes)) {
+      preset.options.mediaTypes = ['movie', 'series'];
+    }
+  }
+}
+
 // Extract default values
 function extractInputDefaults(inputs: any[]): Record<string, any> {
   const defaults: Record<string, any> = {};
@@ -133,7 +153,7 @@ function processTemplate(
   selectedSvcs: string[]
 ): any {
   const inputDefaults = extractInputDefaults(template?.metadata?.inputs || []);
-  const mergedProps = merge({}, inputDefaults, props);
+  const mergedProps = _.merge({}, inputDefaults, props);
   return applyTemplateConditionals(template, mergedProps, selectedSvcs);
 }
 
@@ -151,9 +171,12 @@ export async function configureAioStreams(
     cached,
     size,
     password,
-    advanced
+    advanced,
+    minQuality,
+    excludeAnime
   } = context;
   const isDebridUser = debridEntries.length > 0;
+  const hasTorbox = debridEntries.some((debrid) => debrid.service === 'torbox');
 
   // Fetch template
   let template: any;
@@ -176,10 +199,33 @@ export async function configureAioStreams(
   }));
 
   // Add parent language when selected language is es-MX or pt-BR
+  const primaryLanguage =
+    language === 'pt-BR' ? 'Portuguese (Brazil)' : getLanguageName(language);
   const templateLanguages = [
-    language === 'pt-BR' ? 'Portuguese (Brazil)' : getLanguageName(language),
+    primaryLanguage,
+    ...(language === 'en' ? ['Portuguese (Brazil)', 'Portuguese'] : []),
     ...(language === 'es-MX' ? ['Spanish'] : []),
     ...(language === 'pt-BR' ? ['Portuguese'] : [])
+  ];
+  const languagePassthrough = {
+    language: primaryLanguage,
+    languageAmount: 10,
+    languagePin: language !== 'en' ? true : false,
+    subLanguage: primaryLanguage,
+    subLanguageAmount: 10,
+    subLanguagePin: false
+  };
+  const miscPassthrough = {
+    overallTopQualRes: 12
+  };
+  const deviceExclude = [
+    ...(no4k ? ['4k'] : []),
+    'av1',
+    'trueHD',
+    'dts',
+    'DVonly',
+    'dvOnlyNonRemux',
+    'DVP7'
   ];
 
   // Process template
@@ -191,12 +237,15 @@ export async function configureAioStreams(
       includeAddon: {
         subtitleLanguages: ['disabled']
       },
-      LanguagePassthrough: {
-        language: getLanguageName(language),
-        languagePin: language !== 'en' ? true : false
-      },
+      LanguagePassthrough: languagePassthrough,
+      coreFilter: 'extended',
+      miscPassthrough,
       torboxTier: 'nonPro',
-      ...(no4k ? { deviceExclude: ['4k'] } : {})
+      deviceExclude,
+      // Strong Library Boost pushes TorBox's reliable owned/Library results to
+      // the top of sortCriteria (above resolution/quality), matching the
+      // template's `inputs.sorting.library == high` branch.
+      ...(hasTorbox && { sorting: { library: 'high' } })
     },
     debridServices.map((svc) => svc.id)
   );
@@ -210,13 +259,25 @@ export async function configureAioStreams(
   template.config.presets = template.config.presets.filter(
     (preset: any) => preset.type !== 'webstreamr'
   );
-  const webstreamrConfig = getWebStreamrConfig(language);
-  template.config.presets.push(webstreamrConfig);
+  if (!cached) {
+    const webstreamrConfig = getWebStreamrConfig(language);
+    template.config.presets.push(webstreamrConfig);
+  }
+
+  if (excludeAnime) {
+    restrictPresetMediaTypes(template.config.presets);
+  }
 
   // Build config overrides
   const configOverrides = {
     services: debridServices,
-    excludedResolutions: ['360p', '240p', '144p'],
+    languages: templateLanguages,
+    subtitles: templateLanguages,
+    LanguagePassthrough: languagePassthrough,
+    coreFilter: 'extended',
+    miscPassthrough,
+    deviceExclude,
+    excludedResolutions: getExcludedResolutions(minQuality),
     ...(size && {
       size: {
         global: {
@@ -227,15 +288,25 @@ export async function configureAioStreams(
       }
     }),
     ...(cached && { excludeUncached: true }),
+    // TorBox's instant torrent cache can return the wrong file from multi-file
+    // packs (.nfo/sample/screenshot instead of the video), which surfaces in
+    // Stremio as "stream failed to load". Prefer TorBox's reliable
+    // Usenet/Library copies over the flaky torrent cache, and let cacheAndPlay
+    // pull torrents so the correct file is extracted before playback.
+    ...(hasTorbox && {
+      preferredStreamTypes: ['usenet', 'debrid'],
+      cacheAndPlay: {
+        enabled: true,
+        streamTypes: [...CACHE_AND_PLAY_STREAM_TYPES]
+      }
+    }),
     formatter: {
       id: 'lightgdrive'
     },
-    tmdbAccessToken: '',
-    tvdbApiKey: '',
+    tmdbAccessToken: advanced?.tmdbAccessToken || '',
+    tvdbApiKey: advanced?.tvdbKey || '',
     tmdbApiKey: advanced?.tmdbKey || '',
     ...(!advanced?.tmdbKey && {
-      yearMatching: { enabled: false },
-      titleMatching: { enabled: false },
       bitrate: { useMetadataRuntime: false }
     })
   };
@@ -253,6 +324,10 @@ export async function configureAioStreams(
       presetConfig.aiostreams.manifest = aioStreamsData.manifest;
       presetConfig.aiostreams.manifest.name =
         'AIOStreams' + (debridServiceName ? ` | ${debridServiceName}` : '');
+      applyStreamOnlyManifest(presetConfig.aiostreams.manifest);
+      applyManifestContentPreferences(presetConfig.aiostreams.manifest, {
+        excludeAnime
+      });
       presetConfig.aiostreams.transportUrl = aioStreamsData.transportUrl;
     } else {
       delete presetConfig.aiostreams;

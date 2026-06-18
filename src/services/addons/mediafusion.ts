@@ -4,6 +4,7 @@ import { convertToBytes } from '../../utils/sizeConverters';
 import { debridServicesInfo } from '../../utils/debrid';
 import type { AddonConfigContext } from './types';
 import { getLanguageName } from '../../utils/language';
+import { filterResolutionsByMinQuality } from '../../utils/streamPreferences';
 
 export async function configureMediaFusion(
   presetConfig: any,
@@ -12,7 +13,7 @@ export async function configureMediaFusion(
 ): Promise<{ rebuilt?: any; shouldReplace: boolean; errors?: string[] }> {
   if (!presetConfig.mediafusion) return { shouldReplace: false };
 
-  const { debridEntries, language, no4k, cached, size } = context;
+  const { debridEntries, language, no4k, cached, size, minQuality } = context;
 
   const prepareConfig = (config: any) => {
     if (language !== 'en') {
@@ -22,6 +23,17 @@ export async function configureMediaFusion(
 
     if (no4k) {
       _.pull(config.selected_resolutions, '4k', '2160p', '1440p');
+    }
+
+    config.selected_resolutions = filterResolutionsByMinQuality(
+      config.selected_resolutions,
+      minQuality
+    );
+
+    if (config.max_streams_per_resolution != null) {
+      config.max_streams_per_resolution = Number(
+        config.max_streams_per_resolution
+      );
     }
 
     if (size) {

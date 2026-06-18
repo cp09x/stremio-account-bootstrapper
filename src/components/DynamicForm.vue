@@ -63,17 +63,17 @@
         <div class="space-y-3">
           <div
             v-for="(catalog, index) in formModel.catalogs"
-            :key="catalog.type"
+            :key="catalog.id || `${catalog.type}-${index}`"
             class="flex flex-col md:flex-row md:items-center gap-3 p-3 bg-base-200 rounded-lg"
           >
             <label
-              :for="'catalog-' + catalog.type"
+              :for="`catalog-${catalog.type}-${index}`"
               class="label-text font-semibold min-w-0 md:min-w-[100px] text-left"
             >
               {{ catalog.type }}
             </label>
             <input
-              :id="'catalog-' + catalog.type"
+              :id="`catalog-${catalog.type}-${index}`"
               type="text"
               v-model="catalog.name"
               :placeholder="t('edit_addons_catalogName')"
@@ -125,7 +125,7 @@
 </template>
 
 <script setup>
-import { ref, watch, defineProps, defineEmits } from 'vue';
+import { ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { TrashIcon } from '@heroicons/vue/24/outline';
 import { addNotification } from '../composables/useNotifications';
@@ -161,14 +161,18 @@ watch(
 );
 
 function toggleEditMode() {
-  isAdvancedMode.value = !isAdvancedMode.value;
-  if (!isAdvancedMode.value) {
+  if (isAdvancedMode.value) {
     try {
       formModel.value = JSON.parse(jsonModel.value);
+      isAdvancedMode.value = false;
     } catch (e) {
       addNotification(t('edit_addons_invalid_json'), 'error');
     }
+    return;
   }
+
+  jsonModel.value = JSON.stringify(formModel.value, null, 2);
+  isAdvancedMode.value = true;
 }
 
 function handleSubmit() {

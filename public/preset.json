@@ -6,7 +6,6 @@
       "torrentio",
       "comet",
       "streailer",
-      "subherov2",
       "opensubtitlespro"
     ],
     "standard": [
@@ -14,10 +13,10 @@
       "aiometadata",
       "torrentio",
       "comet",
+      "guindex",
       "meteor",
       "webstreamrmbg",
       "streailer",
-      "subherov2",
       "opensubtitlespro"
     ],
     "full": [
@@ -25,6 +24,7 @@
       "aiometadata",
       "torrentio",
       "comet",
+      "guindex",
       "stremthrutorz",
       "sootio",
       "jackettio",
@@ -35,7 +35,6 @@
       "sootiohttp",
       "hdhub",
       "streailer",
-      "subherov2",
       "opensubtitlespro",
       "localfiles"
     ],
@@ -43,9 +42,13 @@
       "cinemeta",
       "aiometadata",
       "aiostreams",
+      "torrentio_br",
+      "torrentsdb",
       "streailer",
-      "subherov2",
-      "opensubtitlespro"
+      "opensubtitlespro",
+      "opensubtitlesv2",
+      "opensubtitlesv3",
+      "subherov2"
     ],
     "http_only": [
       "cinemeta",
@@ -54,16 +57,9 @@
       "sootiohttp",
       "hdhub",
       "streailer",
-      "subherov2",
       "opensubtitlespro"
     ],
-    "no_streams": [
-      "cinemeta",
-      "aiometadata",
-      "streailer",
-      "subherov2",
-      "opensubtitlespro"
-    ],
+    "no_streams": ["cinemeta", "aiometadata", "streailer", "opensubtitlespro"],
     "factory": [
       "cinemeta-unmodified",
       "stremiochannels",
@@ -220,6 +216,26 @@
           "protected": false
         }
       },
+      "torrentio_br": {
+        "transportUrl": "https://torrentio.strem.fun/providers=comando,bludv,micoleaodublado|language=portuguese|qualityfilter=threed,{{it.no4k}}scr,cam,unknown,576p,480p,360p,240p,144p{{it.maxSize}}|limit={{it.limit}}{{it.transportUrl}}/manifest.json",
+        "transportName": "",
+        "manifest": {
+          "id": "com.stremio.torrentio.addon.br",
+          "version": "0.0.15",
+          "name": "Torrentio BR",
+          "description": "Brazilian Portuguese Torrentio fallback using Comando, BluDV, and MicoLeaoDublado providers.",
+          "logo": "https://torrentio.strem.fun/images/logo_v1.png",
+          "background": "https://torrentio.strem.fun/images/background_v1.jpg",
+          "resources": [
+            {
+              "name": "stream",
+              "types": ["movie", "series"],
+              "idPrefixes": ["tt"]
+            }
+          ],
+          "types": ["movie", "series"]
+        }
+      },
       "comet": {
         "transportUrl": "https://comet.feels.legal/eyJtYXhSZXN1bHRzUGVyUmVzb2x1dGlvbiI6MTAsIm1heFNpemUiOjAsImNhY2hlZE9ubHkiOmZhbHNlLCJyZW1vdmVUcmFzaCI6dHJ1ZSwicmVzdWx0Rm9ybWF0IjpbImFsbCJdLCJkZWJyaWRTZXJ2aWNlIjoidG9ycmVudCIsImRlYnJpZEFwaUtleSI6IiIsImRlYnJpZFN0cmVhbVByb3h5UGFzc3dvcmQiOiIiLCJsYW5ndWFnZXMiOnsiZXhjbHVkZSI6W10sInByZWZlcnJlZCI6WyJlbiJdfSwicmVzb2x1dGlvbnMiOnsicjI0MHAiOmZhbHNlLCJyMzYwcCI6ZmFsc2UsInVua25vd24iOmZhbHNlfSwib3B0aW9ucyI6eyJyZW1vdmVfcmFua3NfdW5kZXIiOi0xMDAwMDAwMDAwMCwiYWxsb3dfZW5nbGlzaF9pbl9sYW5ndWFnZXMiOmZhbHNlLCJyZW1vdmVfdW5rbm93bl9sYW5ndWFnZXMiOmZhbHNlfX0=/manifest.json",
         "transportName": "",
@@ -247,6 +263,25 @@
         "flags": {
           "official": false,
           "protected": false
+        }
+      },
+      "guindex": {
+        "transportUrl": "https://guindex-stremio.vercel.app/manifest.json",
+        "manifest": {
+          "id": "org.guindex.addon",
+          "version": "2.2.0",
+          "name": "GuIndex",
+          "description": "Brazilian stream addon for Stremio. Searches national torrent indexes and resolves streams through Real-Debrid or TorBox.",
+          "resources": ["stream"],
+          "types": ["movie", "series"],
+          "catalogs": [],
+          "logo": "https://raw.githubusercontent.com/GuickerZ/guindex/main/public/logo.png",
+          "behaviorHints": {
+            "adult": false,
+            "p2p": false,
+            "configurable": false,
+            "configurationRequired": false
+          }
         }
       },
       "mediafusion": {
@@ -809,7 +844,7 @@
         }
       },
       "opensubtitlespro": {
-        "transportUrl": "https://opensubtitlesv3-pro.dexter21767.com/eyJsYW5ncyI6WyJlbmdsaXNoIl0sInNvdXJjZSI6ImFsbCIsImFpVHJhbnNsYXRlZCI6dHJ1ZSwiYXV0b0FkanVzdG1lbnQiOnRydWV9/manifest.json",
+        "transportUrl": "https://opensubtitlesv3-pro.dexter21767.com/eyJsYW5ncyI6WyJlbmdsaXNoIiwicG9ydHVndWVzZS1iciJdLCJzb3VyY2UiOiJhbGwiLCJhaVRyYW5zbGF0ZWQiOnRydWUsImF1dG9BZGp1c3RtZW50Ijp0cnVlfQ==/manifest.json",
         "transportName": "",
         "manifest": {
           "id": "community.opensubtitlesv3.pro",
@@ -843,6 +878,34 @@
           "types": ["movie", "series"],
           "resources": ["subtitles"],
           "idPrefixes": ["tt"],
+          "catalogs": [],
+          "addonCatalogs": [],
+          "behaviorHints": {
+            "adult": false,
+            "p2p": false,
+            "configurable": false,
+            "configurationRequired": false
+          }
+        },
+        "flags": {
+          "official": true,
+          "protected": false
+        }
+      },
+      "opensubtitlesv2": {
+        "transportUrl": "https://subtitlesv2.strem.io/manifest.json",
+        "transportName": "",
+        "manifest": {
+          "id": "community.opensubtitlesv2",
+          "version": "0.2.0",
+          "name": "stremio-opensubtitlesv2",
+          "contactEmail": null,
+          "description": "Official OpenSubtitles addon for Stremio",
+          "logo": "http://www.strem.io/images/addons/opensubtitles-logo.png",
+          "background": null,
+          "types": ["movie", "series", "other"],
+          "resources": ["subtitles"],
+          "idPrefixes": ["tt", "bt:", "file:"],
           "catalogs": [],
           "addonCatalogs": [],
           "behaviorHints": {
@@ -1892,6 +1955,25 @@
       "comet": {
         "transportUrl": "https://comet.feels.legal/eyJtYXhSZXN1bHRzUGVyUmVzb2x1dGlvbiI6MTAsIm1heFNpemUiOjAsImNhY2hlZE9ubHkiOmZhbHNlLCJyZW1vdmVUcmFzaCI6dHJ1ZSwicmVzdWx0Rm9ybWF0IjpbImFsbCJdLCJkZWJyaWRTZXJ2aWNlIjoidG9ycmVudCIsImRlYnJpZEFwaUtleSI6IiIsImRlYnJpZFN0cmVhbVByb3h5UGFzc3dvcmQiOiIiLCJsYW5ndWFnZXMiOnsiZXhjbHVkZSI6W10sInByZWZlcnJlZCI6WyJwdCJdfSwicmVzb2x1dGlvbnMiOnsicjI0MHAiOmZhbHNlLCJyMzYwcCI6ZmFsc2UsInVua25vd24iOmZhbHNlfSwib3B0aW9ucyI6eyJyZW1vdmVfcmFua3NfdW5kZXIiOi0xMDAwMDAwMDAwMCwiYWxsb3dfZW5nbGlzaF9pbl9sYW5ndWFnZXMiOmZhbHNlLCJyZW1vdmVfdW5rbm93bl9sYW5ndWFnZXMiOmZhbHNlfX0=/manifest.json"
       },
+      "guindex": {
+        "transportUrl": "https://guindex-stremio.vercel.app/manifest.json",
+        "manifest": {
+          "id": "org.guindex.addon",
+          "version": "2.2.0",
+          "name": "GuIndex",
+          "description": "Addon brasileiro para Stremio. Busca torrents nacionais via torrent-indexer e resolve via Real-Debrid ou TorBox.",
+          "resources": ["stream"],
+          "types": ["movie", "series"],
+          "catalogs": [],
+          "logo": "https://raw.githubusercontent.com/GuickerZ/guindex/main/public/logo.png",
+          "behaviorHints": {
+            "adult": false,
+            "p2p": false,
+            "configurable": false,
+            "configurationRequired": false
+          }
+        }
+      },
       "jackettio": {
         "transportUrl": "https://jackettio.elfhosted.com/eyJtYXhUb3JyZW50cyI6OCwicHJpb3RpemVQYWNrVG9ycmVudHMiOjIsImV4Y2x1ZGVLZXl3b3JkcyI6WyJjYW0iLCJzY3JlZW5lciJdLCJkZWJyaWRJZCI6IiIsImhpZGVVbmNhY2hlZCI6ZmFsc2UsInNvcnRDYWNoZWQiOltbInF1YWxpdHkiLHRydWVdLFsic2l6ZSIsdHJ1ZV1dLCJzb3J0VW5jYWNoZWQiOltbInF1YWxpdHkiLHRydWVdLFsic2VlZGVycyIsdHJ1ZV1dLCJmb3JjZUNhY2hlTmV4dEVwaXNvZGUiOmZhbHNlLCJwcmlvdGl6ZUxhbmd1YWdlcyI6WyJicmF6aWxpYW4iLCJwb3J0dWd1ZXNlIl0sImluZGV4ZXJUaW1lb3V0U2VjIjo2MCwibWV0YUxhbmd1YWdlIjoiIiwiZW5hYmxlTWVkaWFGbG93IjpmYWxzZSwibWVkaWFmbG93UHJveHlVcmwiOiIiLCJtZWRpYWZsb3dBcGlQYXNzd29yZCI6IiIsIm1lZGlhZmxvd1B1YmxpY0lwIjoiIiwidXNlU3RyZW1UaHJ1Ijp0cnVlLCJzdHJlbXRocnVVcmwiOiJodHRwOi8vZWxmaG9zdGVkLWludGVybmFsLnN0cmVtdGhydSIsInF1YWxpdGllcyI6WzQ4MCw3MjAsMTA4MCwyMTYwXSwiaW5kZXhlcnMiOlsiYml0c2VhcmNoIiwiZXp0diIsInRoZXBpcmF0ZWJheSIsInRoZXJhcmJnIiwieXRzIl0sImRlYnJpZEFwaUtleSI6IiJ9/manifest.json"
       },
@@ -2051,7 +2133,7 @@
     },
     "nl": {
       "torrentio": {
-        "transportUrl": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,aanidex,nekobt|language=dutch|qualityfilter=threed,{{it.no4k}}scr,cam,unknown{{it.maxSize}}|limit={{it.limit}}{{it.transportUrl}}/manifest.json"
+        "transportUrl": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|language=dutch|qualityfilter=threed,{{it.no4k}}scr,cam,unknown{{it.maxSize}}|limit={{it.limit}}{{it.transportUrl}}/manifest.json"
       },
       "comet": {
         "transportUrl": "https://comet.feels.legal/eyJtYXhSZXN1bHRzUGVyUmVzb2x1dGlvbiI6MTAsIm1heFNpemUiOjAsImNhY2hlZE9ubHkiOmZhbHNlLCJyZW1vdmVUcmFzaCI6dHJ1ZSwicmVzdWx0Rm9ybWF0IjpbImFsbCJdLCJkZWJyaWRTZXJ2aWNlIjoidG9ycmVudCIsImRlYnJpZEFwaUtleSI6IiIsImRlYnJpZFN0cmVhbVByb3h5UGFzc3dvcmQiOiIiLCJsYW5ndWFnZXMiOnsiZXhjbHVkZSI6W10sInByZWZlcnJlZCI6WyJubCJdfSwicmVzb2x1dGlvbnMiOnsicjI0MHAiOmZhbHNlLCJyMzYwcCI6ZmFsc2UsInVua25vd24iOmZhbHNlfSwib3B0aW9ucyI6eyJyZW1vdmVfcmFua3NfdW5kZXIiOi0xMDAwMDAwMDAwMCwiYWxsb3dfZW5nbGlzaF9pbl9sYW5ndWFnZXMiOmZhbHNlLCJyZW1vdmVfdW5rbm93bl9sYW5ndWFnZXMiOmZhbHNlfX0=/manifest.json"

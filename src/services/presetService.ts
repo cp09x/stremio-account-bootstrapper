@@ -1,4 +1,5 @@
 import _ from 'lodash';
+import * as Sqrl from 'squirrelly';
 import { getRequest } from '../utils/http';
 import { debridServicesInfo, isValidApiKey } from '../utils/debrid';
 import { isValidManifestUrl } from '../utils/url.ts';
@@ -10,7 +11,6 @@ import {
 import type {
   DebridEntry,
   AddonConfigContext,
-  SquirrellyRenderer,
   AdvancedOptions
 } from './addons';
 import {
@@ -25,12 +25,15 @@ import {
   configureStremThruStore,
   configureSootio,
   configureAioStreams,
-  configureHdHub
+  configureHdHub,
+  configureGuIndex
 } from './addons';
 import { configureMeteor } from './addons/meteor.ts';
 import { LOCALE_MESSAGES } from '../locales';
-
-declare const Sqrl: SquirrellyRenderer;
+import {
+  applyManifestContentPreferences,
+  type MinQuality
+} from '../utils/streamPreferences';
 
 function translateCollections(collections: any[], language: string): any[] {
   const lang = language.split('-')[0] || 'en';
@@ -81,8 +84,9 @@ export async function buildPresetService(params: BuildPresetServiceParams) {
   const mediaFusionConfig = data.mediafusionConfig;
   let presetConfig: any = {};
   let no4k = options.includes('no4k');
-  let cached = options.includes('cached');
   let kids = options.includes('kids');
+  let excludeAnime = options.includes('excludeAnime');
+  let minQuality: MinQuality = options.includes('min720p') ? '720p' : 'any';
   let limit = preset === 'minimal' ? 5 : 10;
   let size = maxSize ? maxSize : '';
   let presetKeys = data.presets[preset];
@@ -142,9 +146,13 @@ export async function buildPresetService(params: BuildPresetServiceParams) {
     }
   }
 
+  const selectedExtras = excludeAnime
+    ? extras.filter((extra) => extra !== 'kitsu')
+    : extras;
+
   // Extras
-  if (extras.length > 0) {
-    extras.forEach((extra) => {
+  if (selectedExtras.length > 0) {
+    selectedExtras.forEach((extra) => {
       _.merge(presetConfig, { [extra]: data.extras[extra] });
     });
   }
@@ -156,6 +164,7 @@ export async function buildPresetService(params: BuildPresetServiceParams) {
       data,
       language,
       kids,
+      excludeAnime,
       password,
       advanced,
       platform
@@ -179,6 +188,8 @@ export async function buildPresetService(params: BuildPresetServiceParams) {
           )
           .join(' + ')
       : '';
+  const cached =
+    validatedDebridEntries.length > 0 && options.includes('cached');
 
   // Create context for addon configurations
   const context: AddonConfigContext = {
@@ -190,7 +201,10 @@ export async function buildPresetService(params: BuildPresetServiceParams) {
     debridEntries: validatedDebridEntries,
     debridServiceName,
     preset,
-    password
+    password,
+    advanced,
+    minQuality,
+    excludeAnime
   };
 
   // Helper function to replace an addon key with cloned entries while maintaining order
@@ -221,6 +235,22 @@ export async function buildPresetService(params: BuildPresetServiceParams) {
       presetConfig,
       'torrentio',
       torrentioResult.rebuilt
+    );
+  }
+
+  // Narrow Brazilian Torrentio fallback. Keep this separate from generic
+  // Torrentio so Portuguese providers do not pollute title matching globally.
+  const torrentioBrResult = configureTorrentio(
+    presetConfig,
+    context,
+    Sqrl,
+    'torrentio_br'
+  );
+  if (torrentioBrResult.shouldReplace && torrentioBrResult.rebuilt) {
+    presetConfig = replaceAddonKey(
+      presetConfig,
+      'torrentio_br',
+      torrentioBrResult.rebuilt
     );
   }
 
@@ -319,6 +349,16 @@ export async function buildPresetService(params: BuildPresetServiceParams) {
     // Sootio
     configureSootio(presetConfig, context);
 
+    // GuIndex
+    const guIndexResult = configureGuIndex(presetConfig, context);
+    if (guIndexResult.shouldReplace && guIndexResult.rebuilt) {
+      presetConfig = replaceAddonKey(
+        presetConfig,
+        'guindex',
+        guIndexResult.rebuilt
+      );
+    }
+
     // StremThru Store
     try {
       const stremthruStoreResult = await configureStremThruStore(
@@ -342,9 +382,15 @@ export async function buildPresetService(params: BuildPresetServiceParams) {
   } else {
     delete presetConfig.jackettio;
     delete presetConfig.sootio;
+    delete presetConfig.guindex;
   }
 
-  console.log('PRESET CONFIG', presetConfig);
+  if (excludeAnime) {
+    Object.values(presetConfig).forEach((addon: any) => {
+      applyManifestContentPreferences(addon?.manifest, { excludeAnime });
+    });
+  }
+
   const selectedAddons = Object.keys(presetConfig).map((k) => presetConfig[k]);
 
   if (selectedAddons.length === 0 && errors.length > 0) {

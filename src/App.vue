@@ -26,6 +26,9 @@ const authSourceByPlatform = ref({
   nuvio: ''
 });
 
+const restoredAccountSnapshot = ref(null);
+const importedBuilderSettings = ref(null);
+
 const activeAuthKey = computed(
   () => authKeysByPlatform.value[selectedPlatform.value] || ''
 );
@@ -45,6 +48,14 @@ function setAuthKey(payload) {
 
   authKeysByPlatform.value[payload.platform] = payload.key || '';
   authSourceByPlatform.value[payload.platform] = payload.source || '';
+}
+
+function setRestoredAccountSnapshot(payload) {
+  restoredAccountSnapshot.value = payload;
+}
+
+function setImportedBuilderSettings(payload) {
+  importedBuilderSettings.value = payload;
 }
 </script>
 
@@ -72,11 +83,18 @@ function setAuthKey(payload) {
       @platform-change="setPlatform"
       @auth-key="setAuthKey"
     />
-    <Backup :platform="selectedPlatform" :authKey="activeAuthKey" />
+    <Backup
+      :platform="selectedPlatform"
+      :authKey="activeAuthKey"
+      @restored="setRestoredAccountSnapshot"
+      @builder-settings="setImportedBuilderSettings"
+    />
     <Configuration
       :platform="selectedPlatform"
       :authKey="activeAuthKey"
       :authSource="activeAuthSource"
+      :restoredAccountSnapshot="restoredAccountSnapshot"
+      :importedBuilderSettings="importedBuilderSettings"
     />
     <FAQ :platform="selectedPlatform" />
     <ThankYou />
