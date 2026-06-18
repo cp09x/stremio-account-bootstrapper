@@ -6,8 +6,23 @@ interface TransportUrl {
   manifest: string;
 }
 
-export const decodeDataFromTransportUrl = (data: string): unknown =>
-  JSON.parse(Buffer.from(data, 'base64').toString('utf-8'));
+export const decodeDataFromTransportUrl = (data: string): unknown => {
+  let decoded: string;
+  try {
+    decoded = Buffer.from(data, 'base64').toString('utf-8');
+  } catch (e) {
+    throw new Error(
+      `Failed to base64-decode transport URL data: ${e instanceof Error ? e.message : String(e)}`
+    );
+  }
+  try {
+    return JSON.parse(decoded);
+  } catch (e) {
+    throw new Error(
+      `Failed to parse transport URL data as JSON: ${e instanceof Error ? e.message : String(e)}`
+    );
+  }
+};
 
 export const encodeDataFromTransportUrl = (data: unknown): string =>
   Buffer.from(JSON.stringify(data)).toString('base64');
@@ -19,13 +34,26 @@ export const getDataTransportUrl = (
   const parsedUrl = url.match(
     /(https?:\/\/[^\/]+(?:\/[^\/]+)*\/)([^\/=]+={0,2})(\/manifest\.json)$/
   );
-  if (!parsedUrl) throw new Error('Invalid transport URL');
+  if (!parsedUrl || !parsedUrl[1] || !parsedUrl[2] || !parsedUrl[3]) {
+    throw new Error(`Invalid transport URL: ${url}`);
+  }
+  const encodedData = parsedUrl[2];
+  const parseData = (): object => {
+    if (base64) {
+      return decodeDataFromTransportUrl(encodedData) as object;
+    }
+    try {
+      return JSON.parse(decodeURIComponent(encodedData));
+    } catch (e) {
+      throw new Error(
+        `Failed to parse transport URL data: ${e instanceof Error ? e.message : String(e)}`
+      );
+    }
+  };
   return {
-    domain: parsedUrl[1]!,
-    data: base64
-      ? decodeDataFromTransportUrl(parsedUrl[2]!)
-      : JSON.parse(decodeURIComponent(parsedUrl[2]!)),
-    manifest: parsedUrl[3]!
+    domain: parsedUrl[1],
+    data: parseData(),
+    manifest: parsedUrl[3]
   };
 };
 

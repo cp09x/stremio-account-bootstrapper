@@ -1,3 +1,4 @@
+import _ from 'lodash';
 import { getAddonConfig as getAioMetadataConfig } from '../../api/aioMetadataApi';
 import { LOCALE_MESSAGES } from '../../locales';
 import type { AdvancedOptions } from './types';
@@ -76,7 +77,7 @@ export async function configureAioMetadata(
 ): Promise<void> {
   if (!presetConfig.aiometadata) return;
 
-  const aioMetadataConfig = data.aioMetadataConfig;
+  const aioMetadataConfig = _.cloneDeep(data.aioMetadataConfig);
 
   // Set language
   aioMetadataConfig.config.language = language;

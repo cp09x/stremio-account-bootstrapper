@@ -39,7 +39,7 @@ export const isValidApiKey = (
     alldebrid: /^[a-zA-Z0-9]{20}$/,
     premiumize: /^[a-z0-9]{16}$/i,
     debridlink: /^[A-Z0-9]{6}-[A-Z0-9]{6}-[A-Z0-9]{6}-[A-Z0-9]{5}$/,
-    realdebrid: /^[A-Z0-9]{52}$/,
+    realdebrid: /^[A-Za-z0-9]{52}$/,
     torbox: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
   };
   return !!patterns[service]?.test(key);

@@ -16,4 +16,15 @@ describe('isValidApiKey', () => {
     expect(isValidApiKey('torbox', 'A'.repeat(52))).toBe(false);
     expect(isValidApiKey('realdebrid', '')).toBe(false);
   });
+
+  it('accepts a 52-char Real-Debrid token containing lowercase chars', () => {
+    const token = ('abc123' + 'A'.repeat(46)).slice(0, 52);
+    expect(token).toHaveLength(52);
+    expect(isValidApiKey('realdebrid', token)).toBe(true);
+  });
+
+  it('rejects Real-Debrid tokens with the wrong length', () => {
+    expect(isValidApiKey('realdebrid', 'a'.repeat(51))).toBe(false);
+    expect(isValidApiKey('realdebrid', 'a'.repeat(53))).toBe(false);
+  });
 });

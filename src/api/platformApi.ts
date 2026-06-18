@@ -10,16 +10,25 @@ const apiByPlatform = {
 
 const getApi = (platform: Platform) => apiByPlatform[platform] || stremioApi;
 
+const FAILURE_RESPONSE = {
+  error: { message: 'Empty or unrecognized response from platform' }
+};
+
 const normalizePlatformResponse = (payload: any): any => {
   if (payload === null || payload === undefined) {
-    return { result: { success: true } };
+    return FAILURE_RESPONSE;
   }
 
   if (typeof payload !== 'object') {
     return payload;
   }
 
-  if (payload?.result?.authKey || payload?.error?.message) {
+  if (
+    payload?.result?.authKey ||
+    payload?.result?.success !== undefined ||
+    Array.isArray(payload?.result?.addons) ||
+    payload?.error?.message
+  ) {
     return payload;
   }
 
@@ -61,7 +70,7 @@ const normalizePlatformResponse = (payload: any): any => {
     };
   }
 
-  return payload;
+  return FAILURE_RESPONSE;
 };
 
 export const getAddonCollection = async (
