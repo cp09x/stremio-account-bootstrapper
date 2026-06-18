@@ -1,12 +1,85 @@
 @import 'tailwindcss';
 @plugin "daisyui";
 
-@plugin "daisyui/theme" {
-  name: 'light';
-  --color-secondary: var(--color-warning);
+@theme {
+  --font-sans: 'Raleway', ui-sans-serif, system-ui, sans-serif;
+  --font-serif: 'Lora', ui-serif, Georgia, serif;
 }
 
 @plugin "daisyui/theme" {
-  name: 'dark';
-  --color-secondary: var(--color-warning);
+  name: 'paper';
+  default: true;
+  prefersdark: false;
+  color-scheme: light;
+
+  --color-base-100: #fbfaf6;
+  --color-base-200: #f4f2ec;
+  --color-base-300: #e4e0d6;
+  --color-base-content: #211e1a;
+  --color-primary: #3f6b4e;
+  --color-primary-content: #ffffff;
+  --color-secondary: #6f6a60;
+  --color-secondary-content: #ffffff;
+  --color-accent: #b06a3b;
+  --color-accent-content: #ffffff;
+  --color-neutral: #211e1a;
+  --color-neutral-content: #f4f2ec;
+  --color-info: #3f6b4e;
+  --color-info-content: #ffffff;
+  --color-success: #3f6b4e;
+  --color-success-content: #ffffff;
+  --color-warning: #c2410c;
+  --color-warning-content: #ffffff;
+  --color-error: #b91c1c;
+  --color-error-content: #ffffff;
+
+  --radius-selector: 0.5rem;
+  --radius-field: 0.5rem;
+  --radius-box: 0.5rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+
+@plugin "daisyui/theme" {
+  name: 'mossdark';
+  default: false;
+  prefersdark: true;
+  color-scheme: dark;
+
+  --color-base-100: #1e1b16;
+  --color-base-200: #14120e;
+  --color-base-300: #332e25;
+  --color-base-content: #f3efe6;
+  --color-primary: #6e9e7c;
+  --color-primary-content: #14120e;
+  --color-secondary: #a39c8c;
+  --color-secondary-content: #14120e;
+  --color-accent: #d08a5a;
+  --color-accent-content: #14120e;
+  --color-neutral: #f3efe6;
+  --color-neutral-content: #1e1b16;
+  --color-info: #6e9e7c;
+  --color-info-content: #14120e;
+  --color-success: #6e9e7c;
+  --color-success-content: #14120e;
+  --color-warning: #d08a5a;
+  --color-warning-content: #14120e;
+  --color-error: #e06a60;
+  --color-error-content: #14120e;
+
+  --radius-selector: 0.5rem;
+  --radius-field: 0.5rem;
+  --radius-box: 0.5rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+
+body {
+  font-family: var(--font-sans);
 }
