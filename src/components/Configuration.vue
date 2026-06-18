@@ -9,7 +9,12 @@ import { addNotification } from '../composables/useNotifications';
 import { useAnalytics } from '../composables/useAnalytics';
 import { isValidApiKey, debridServicesInfo } from '../utils/debrid.ts';
 import { isValidManifestUrl } from '../utils/url.ts';
-import { getAddonCollection, pullProfiles } from '../api/platformApi';
+import {
+  getAddonCollection,
+  setAddonCollection,
+  pullProfiles
+} from '../api/platformApi';
+import { diffAddonCollections } from '../utils/addonDiff.ts';
 import {
   buildPresetService,
   loadPresetService
@@ -72,6 +77,13 @@ let isPasswordModalVisible = ref(false);
 let generatedPassword = ref(generatePassword());
 let passwordAcknowledged = ref(false);
 let currentAccountSnapshot = ref(null);
+
+let isSyncConfirmVisible = ref(false);
+let isPreparingSync = ref(false);
+let syncDiff = ref(null);
+let lastSyncSnapshot = ref(null);
+let isUndoingSync = ref(false);
+let isUndoConfirmVisible = ref(false);
 let builderSettingsFileInputRef = ref(null);
 let lastBuilderSettingsImport = ref(null);
 let addonBuildErrors = ref([]);
@@ -275,6 +287,43 @@ async function loadUserAddons() {
 }
 
 async function syncUserAddons() {
+  const key = props.authKey;
+  if (!key) {
+    console.error('No auth key provided');
+    return;
+  }
+
+  isPreparingSync.value = true;
+
+  try {
+    const response = await getAddonCollection(
+      props.platform,
+      key,
+      selectedNuvioProfileId.value ?? 1
+    );
+    const currentAddons = extractAddonList(response);
+
+    lastSyncSnapshot.value = currentAddons;
+    syncDiff.value = diffAddonCollections(currentAddons, addons.value);
+    isSyncConfirmVisible.value = true;
+    document.body.classList.add('modal-open');
+  } catch (error) {
+    console.error('Failed to load current account before sync', error);
+    const errorMessage =
+      error instanceof Error ? error.message : t('sync_diff_load_failed');
+    addNotification(errorMessage, 'error');
+  } finally {
+    isPreparingSync.value = false;
+  }
+}
+
+function cancelSyncConfirm() {
+  isSyncConfirmVisible.value = false;
+  syncDiff.value = null;
+  document.body.classList.remove('modal-open');
+}
+
+async function confirmSyncUserAddons() {
   const { track } = useAnalytics();
   const key = props.authKey;
   if (!key) {
@@ -282,6 +331,8 @@ async function syncUserAddons() {
     return;
   }
 
+  isSyncConfirmVisible.value = false;
+  document.body.classList.remove('modal-open');
   isSyncAddons.value = true;
   console.log('Syncing addons...');
 
@@ -318,6 +369,53 @@ async function syncUserAddons() {
     console.error('Sync failed', error);
   } finally {
     isSyncAddons.value = false;
+    syncDiff.value = null;
+  }
+}
+
+function requestUndoLastSync() {
+  if (!lastSyncSnapshot.value) return;
+  isUndoConfirmVisible.value = true;
+  document.body.classList.add('modal-open');
+}
+
+function cancelUndoConfirm() {
+  isUndoConfirmVisible.value = false;
+  document.body.classList.remove('modal-open');
+}
+
+async function confirmUndoLastSync() {
+  const key = props.authKey;
+  const snapshot = lastSyncSnapshot.value;
+  if (!key || !snapshot) {
+    isUndoConfirmVisible.value = false;
+    document.body.classList.remove('modal-open');
+    return;
+  }
+
+  isUndoConfirmVisible.value = false;
+  document.body.classList.remove('modal-open');
+  isUndoingSync.value = true;
+
+  try {
+    const res = await setAddonCollection(
+      props.platform,
+      snapshot,
+      key,
+      selectedNuvioProfileId.value ?? 1
+    );
+    if (res?.result?.success === false) {
+      throw new Error(res?.result?.error || t('undo_sync_failed'));
+    }
+    addNotification(t('undo_sync_complete'), 'success');
+    lastSyncSnapshot.value = null;
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : t('undo_sync_failed');
+    addNotification(errorMessage, 'error');
+    console.error('Undo sync failed', error);
+  } finally {
+    isUndoingSync.value = false;
   }
 }
 
@@ -1533,25 +1631,162 @@ watch(
         <legend class="text-sm">
           {{ $t('step10_bootstrap_account') }}
         </legend>
-        <button
-          type="button"
-          class="btn btn-primary"
-          :disabled="!isSyncButtonEnabled || isLoadingPreset || isSyncAddons"
-          @click="syncUserAddons"
-        >
-          <span
-            v-if="isSyncAddons"
-            class="loading loading-spinner loading-sm"
-          ></span>
-          {{
-            isSyncAddons
-              ? $t('sync_addons')
-              : $t('sync_to_stremio', { platform: platformLabel })
-          }}
-        </button>
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <button
+            type="button"
+            class="btn btn-primary"
+            :disabled="
+              !isSyncButtonEnabled ||
+              isLoadingPreset ||
+              isSyncAddons ||
+              isPreparingSync ||
+              isUndoingSync
+            "
+            @click="syncUserAddons"
+          >
+            <span
+              v-if="isSyncAddons || isPreparingSync"
+              class="loading loading-spinner loading-sm"
+            ></span>
+            {{
+              isSyncAddons
+                ? $t('sync_addons')
+                : isPreparingSync
+                  ? $t('sync_diff_loading')
+                  : $t('sync_to_stremio', { platform: platformLabel })
+            }}
+          </button>
+
+          <button
+            type="button"
+            class="btn btn-outline"
+            :disabled="!lastSyncSnapshot || isUndoingSync || isSyncAddons"
+            @click="requestUndoLastSync"
+          >
+            <span
+              v-if="isUndoingSync"
+              class="loading loading-spinner loading-sm"
+            ></span>
+            {{ isUndoingSync ? $t('undoing_sync') : $t('undo_last_sync') }}
+          </button>
+        </div>
+        <p class="mt-3 text-xs opacity-70">
+          {{ $t('undo_last_sync_hint') }}
+        </p>
       </fieldset>
     </form>
   </section>
+
+  <!-- Pre-sync diff confirmation modal -->
+  <dialog v-if="isSyncConfirmVisible" class="modal modal-open">
+    <div class="modal-box w-11/12 max-w-2xl">
+      <button
+        class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
+        @click="cancelSyncConfirm"
+      >
+        ✕
+      </button>
+      <h3 class="font-bold text-lg mb-2">{{ $t('sync_confirm_title') }}</h3>
+      <p class="mb-4 text-sm opacity-80">
+        {{ $t('sync_confirm_message', { platform: platformLabel }) }}
+      </p>
+
+      <div v-if="syncDiff" class="space-y-4">
+        <div class="flex flex-wrap gap-2">
+          <span class="badge badge-success">
+            {{ $t('sync_diff_added') }}: {{ syncDiff.added.length }}
+          </span>
+          <span class="badge badge-error">
+            {{ $t('sync_diff_removed') }}: {{ syncDiff.removed.length }}
+          </span>
+          <span class="badge badge-ghost">
+            {{ $t('sync_diff_kept') }}: {{ syncDiff.kept.length }}
+          </span>
+          <span v-if="syncDiff.reordered" class="badge badge-warning">
+            {{ $t('sync_diff_reordered') }}
+          </span>
+        </div>
+
+        <div v-if="syncDiff.added.length > 0">
+          <p class="font-semibold text-success">{{ $t('sync_diff_added') }}</p>
+          <ul class="mt-1 list-disc pl-5 text-sm">
+            <li v-for="name in syncDiff.added" :key="`add-${name}`">
+              {{ name }}
+            </li>
+          </ul>
+        </div>
+
+        <div v-if="syncDiff.removed.length > 0">
+          <p class="font-semibold text-error">{{ $t('sync_diff_removed') }}</p>
+          <ul class="mt-1 list-disc pl-5 text-sm">
+            <li v-for="name in syncDiff.removed" :key="`rem-${name}`">
+              {{ name }}
+            </li>
+          </ul>
+        </div>
+
+        <div v-if="syncDiff.kept.length > 0">
+          <p class="font-semibold opacity-80">{{ $t('sync_diff_kept') }}</p>
+          <div class="mt-1 flex flex-wrap gap-2">
+            <span
+              v-for="name in syncDiff.kept.slice(0, 12)"
+              :key="`kept-${name}`"
+              class="badge badge-outline"
+            >
+              {{ name }}
+            </span>
+            <span v-if="syncDiff.kept.length > 12" class="badge badge-ghost">
+              +{{ syncDiff.kept.length - 12 }} {{ $t('more') }}
+            </span>
+          </div>
+        </div>
+
+        <p
+          v-if="
+            syncDiff.added.length === 0 &&
+            syncDiff.removed.length === 0 &&
+            !syncDiff.reordered
+          "
+          class="text-sm text-warning"
+        >
+          {{ $t('sync_diff_no_changes') }}
+        </p>
+      </div>
+
+      <div class="modal-action">
+        <button class="btn" @click="cancelSyncConfirm">
+          {{ $t('cancel') }}
+        </button>
+        <button class="btn btn-primary" @click="confirmSyncUserAddons">
+          {{ $t('sync_confirm_apply') }}
+        </button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Undo last sync confirmation modal -->
+  <dialog v-if="isUndoConfirmVisible" class="modal modal-open">
+    <div class="modal-box">
+      <button
+        class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
+        @click="cancelUndoConfirm"
+      >
+        ✕
+      </button>
+      <h3 class="font-bold text-lg mb-2">{{ $t('undo_confirm_title') }}</h3>
+      <p class="mb-4 text-sm opacity-80">
+        {{ $t('undo_confirm_message', { platform: platformLabel }) }}
+      </p>
+      <div class="modal-action">
+        <button class="btn" @click="cancelUndoConfirm">
+          {{ $t('cancel') }}
+        </button>
+        <button class="btn btn-primary" @click="confirmUndoLastSync">
+          {{ $t('undo_confirm_apply') }}
+        </button>
+      </div>
+    </div>
+  </dialog>
 
   <!-- Password Modal -->
   <dialog v-if="isPasswordModalVisible" class="modal modal-open">

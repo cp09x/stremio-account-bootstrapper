@@ -33,6 +33,9 @@ const loadingRestore = ref(false);
 const error = ref(null);
 const fileInputRef = ref(null);
 const lastRestore = ref(null);
+const preRestoreSnapshot = ref(null);
+const undoingRestore = ref(false);
+const undoConfirmVisible = ref(false);
 const { track } = useAnalytics();
 
 const platformLabel = computed(() =>
@@ -168,6 +171,14 @@ async function restoreConfigFile(event) {
 
     const backup = parseAccountBackup(parsed);
 
+    try {
+      const preRestore = await getAddonCollection(platform, authKey);
+      preRestoreSnapshot.value = extractAddonList(preRestore);
+    } catch (snapshotError) {
+      preRestoreSnapshot.value = null;
+      console.error('Failed to snapshot account before restore', snapshotError);
+    }
+
     const restoreResponse = await setAddonCollection(
       platform,
       backup.addons,
@@ -242,6 +253,42 @@ async function restoreConfigFile(event) {
     event.target.value = '';
   }
 }
+
+function requestUndoRestore() {
+  if (!preRestoreSnapshot.value) return;
+  undoConfirmVisible.value = true;
+}
+
+function cancelUndoRestore() {
+  undoConfirmVisible.value = false;
+}
+
+async function confirmUndoRestore() {
+  const snapshot = preRestoreSnapshot.value;
+  if (!authKey || !snapshot) {
+    undoConfirmVisible.value = false;
+    return;
+  }
+
+  undoConfirmVisible.value = false;
+  undoingRestore.value = true;
+  error.value = null;
+
+  try {
+    const res = await setAddonCollection(platform, snapshot, authKey);
+    if (res?.result?.success === false) {
+      throw new Error(res?.result?.error || t('undo_sync_failed'));
+    }
+    addNotification(t('undo_sync_complete'), 'success');
+    preRestoreSnapshot.value = null;
+    lastRestore.value = null;
+  } catch (e) {
+    error.value = e?.message || String(e);
+    addNotification(error.value || t('undo_sync_failed'), 'error');
+  } finally {
+    undoingRestore.value = false;
+  }
+}
 </script>
 
 <template>
@@ -314,6 +361,19 @@ async function restoreConfigFile(event) {
             Exported at {{ lastRestore.exportedAt }}
           </p>
         </div>
+
+        <button
+          type="button"
+          class="btn btn-outline btn-sm mt-3"
+          :disabled="!preRestoreSnapshot || undoingRestore"
+          @click="requestUndoRestore"
+        >
+          <span
+            v-if="undoingRestore"
+            class="loading loading-spinner loading-sm"
+          ></span>
+          {{ undoingRestore ? $t('undoing_sync') : $t('undo_last_sync') }}
+        </button>
 
         <div class="mt-3 flex flex-wrap gap-2">
           <span
@@ -390,4 +450,28 @@ async function restoreConfigFile(event) {
       </div>
     </div>
   </section>
+
+  <!-- Undo restore confirmation modal -->
+  <dialog v-if="undoConfirmVisible" class="modal modal-open">
+    <div class="modal-box">
+      <button
+        class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
+        @click="cancelUndoRestore"
+      >
+        ✕
+      </button>
+      <h3 class="font-bold text-lg mb-2">{{ $t('undo_confirm_title') }}</h3>
+      <p class="mb-4 text-sm opacity-80">
+        {{ $t('undo_confirm_message', { platform: platformLabel }) }}
+      </p>
+      <div class="modal-action">
+        <button class="btn" @click="cancelUndoRestore">
+          {{ $t('cancel') }}
+        </button>
+        <button class="btn btn-primary" @click="confirmUndoRestore">
+          {{ $t('undo_confirm_apply') }}
+        </button>
+      </div>
+    </div>
+  </dialog>
 </template>
