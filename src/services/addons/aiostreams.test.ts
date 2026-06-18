@@ -24,7 +24,13 @@ const createPreset = (): any => ({
 
 const createTemplate = () => ({
   metadata: {
-    inputs: []
+    inputs: [
+      {
+        id: 'sorting',
+        type: 'subsection',
+        subOptions: [{ id: 'library', type: 'select', default: 'default' }]
+      }
+    ]
   },
   config: {
     presets: [
@@ -37,7 +43,18 @@ const createTemplate = () => ({
     ],
     titleMatching: { enabled: true },
     yearMatching: { enabled: true },
-    bitrate: { useMetadataRuntime: true }
+    bitrate: { useMetadataRuntime: true },
+    // Mirrors the Tamtaro template: the Library Boost sort key is only present
+    // when `inputs.sorting.library == high` resolves true via processTemplate.
+    sortCriteria: {
+      global: [
+        {
+          __if: 'inputs.sorting.library == high',
+          key: 'library',
+          direction: 'desc'
+        }
+      ]
+    }
   }
 });
 
@@ -92,6 +109,8 @@ describe('configureAioStreams', () => {
     expect(mocks.submittedConfig.config.excludeUncached).toBe(true);
     expect(mocks.submittedConfig.config.preferredStreamTypes).toBeUndefined();
     expect(mocks.submittedConfig.config.cacheAndPlay).toBeUndefined();
+    // Library Boost is gated on TorBox; with RD the high branch must not resolve.
+    expect(mocks.submittedConfig.config.sortCriteria.global).toEqual([]);
     expect(mocks.submittedConfig.config.excludedResolutions).toContain('576p');
     expect(mocks.submittedConfig.config.coreFilter).toBe('extended');
     expect(mocks.submittedConfig.config.miscPassthrough).toMatchObject({
@@ -168,5 +187,11 @@ describe('configureAioStreams', () => {
       enabled: true,
       streamTypes: ['usenet', 'torrent']
     });
+    // The high Library Boost sorting prop flowed through processTemplate, so the
+    // template's `inputs.sorting.library == high` branch resolved and kept the
+    // library sort key (pushing TorBox's owned/Library results to the top).
+    expect(mocks.submittedConfig.config.sortCriteria.global).toEqual([
+      { key: 'library', direction: 'desc' }
+    ]);
   });
 });

@@ -13,6 +13,11 @@ import {
   getExcludedResolutions
 } from '../../utils/streamPreferences';
 
+// Asymmetry: cacheAndPlay.streamTypes only accepts 'usenet'|'torrent' (NOT
+// 'debrid', unlike preferredStreamTypes) — passing 'debrid' makes AIOStreams
+// reject the whole config with a 400.
+const CACHE_AND_PLAY_STREAM_TYPES = ['usenet', 'torrent'] as const;
+
 function addLanguageSpecificAddons(
   presets: any[],
   language: string,
@@ -236,7 +241,11 @@ export async function configureAioStreams(
       coreFilter: 'extended',
       miscPassthrough,
       torboxTier: 'nonPro',
-      deviceExclude
+      deviceExclude,
+      // Strong Library Boost pushes TorBox's reliable owned/Library results to
+      // the top of sortCriteria (above resolution/quality), matching the
+      // template's `inputs.sorting.library == high` branch.
+      ...(hasTorbox && { sorting: { library: 'high' } })
     },
     debridServices.map((svc) => svc.id)
   );
@@ -286,7 +295,10 @@ export async function configureAioStreams(
     // pull torrents so the correct file is extracted before playback.
     ...(hasTorbox && {
       preferredStreamTypes: ['usenet', 'debrid'],
-      cacheAndPlay: { enabled: true, streamTypes: ['usenet', 'torrent'] }
+      cacheAndPlay: {
+        enabled: true,
+        streamTypes: [...CACHE_AND_PLAY_STREAM_TYPES]
+      }
     }),
     formatter: {
       id: 'lightgdrive'
