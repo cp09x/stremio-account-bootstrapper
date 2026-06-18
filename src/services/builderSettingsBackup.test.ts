@@ -20,7 +20,8 @@ const settings = {
   advancedOptions: {
     tmdbKey: 'tmdb',
     unknown: 'kept'
-  }
+  },
+  password: 'super-secret-password'
 };
 
 describe('builderSettingsBackup', () => {
@@ -36,6 +37,38 @@ describe('builderSettingsBackup', () => {
     expect(backup.exportedAt).toBe('2026-06-14T10:00:00.000Z');
     expect(isBuilderSettingsBackup(backup)).toBe(true);
     expect(parseBuilderSettingsBackup(backup)).toMatchObject(settings);
+  });
+
+  it('round-trips the generated password through export/import', () => {
+    const backup = createBuilderSettingsBackup({
+      settings: { ...settings, password: 'AbC123!@#xyz' },
+      appVersion: 'test'
+    });
+
+    expect(backup.payload.password).toBe('AbC123!@#xyz');
+    expect(parseBuilderSettingsBackup(backup).password).toBe('AbC123!@#xyz');
+  });
+
+  it('defaults password to empty string when absent', () => {
+    expect(
+      parseBuilderSettingsBackup({
+        builderSettings: { preset: 'allinone' }
+      }).password
+    ).toBe('');
+  });
+
+  it('drops half-filled debrid entries (missing service or key)', () => {
+    const result = parseBuilderSettingsBackup({
+      builderSettings: {
+        debridEntries: [
+          { service: 'realdebrid', key: '' },
+          { service: '', key: 'orphan-key' },
+          { service: 'torbox', key: 'abc' }
+        ]
+      }
+    });
+
+    expect(result.debridEntries).toEqual([{ service: 'torbox', key: 'abc' }]);
   });
 
   it('normalizes partial legacy settings objects', () => {

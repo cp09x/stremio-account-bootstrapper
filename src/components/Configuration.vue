@@ -70,9 +70,11 @@ let isLoadingNuvioProfiles = ref(false);
 
 let isPasswordModalVisible = ref(false);
 let generatedPassword = ref(generatePassword());
+let passwordAcknowledged = ref(false);
 let currentAccountSnapshot = ref(null);
 let builderSettingsFileInputRef = ref(null);
 let lastBuilderSettingsImport = ref(null);
+let addonBuildErrors = ref([]);
 
 const MAX_CUSTOM_ADDONS = 10;
 const MAX_DEBRID_ENTRIES = 5;
@@ -141,7 +143,8 @@ function currentBuilderSettings() {
     customAddons: [...customAddons.value],
     options: [...options.value],
     maxSize: maxSize.value,
-    advancedOptions: { ...advancedOptions.value }
+    advancedOptions: { ...advancedOptions.value },
+    password: generatedPassword.value
   };
 }
 
@@ -183,6 +186,9 @@ function applyBuilderSettings(settings, source = {}) {
     ...advancedOptions.value,
     ...settings.advancedOptions
   };
+  if (settings.password) {
+    generatedPassword.value = settings.password;
+  }
   isSyncButtonEnabled.value = false;
   lastBuilderSettingsImport.value = {
     fileName: source.fileName || 'Builder settings',
@@ -249,6 +255,7 @@ async function loadUserAddons() {
     addons.value = selectedAddons;
     collections = builtCollections;
     isSyncButtonEnabled.value = selectedAddons.length > 0;
+    addonBuildErrors.value = [...presetErrors];
 
     if (presetErrors.length > 0) {
       addNotification(presetErrors.join('\n'), 'warning');
@@ -261,6 +268,7 @@ async function loadUserAddons() {
     addons.value = [];
     collections = [];
     isSyncButtonEnabled.value = false;
+    addonBuildErrors.value = [];
   } finally {
     isLoadingPreset.value = false;
   }
@@ -283,7 +291,7 @@ async function syncUserAddons() {
       key,
       platform: props.platform,
       collections,
-      profileId: selectedNuvioProfileId.value || 1
+      profileId: selectedNuvioProfileId.value ?? 1
     });
     addNotification(t('sync_complete'), 'success');
     track('sync_stremio_click', {
@@ -298,7 +306,10 @@ async function syncUserAddons() {
           .join(',')
       }
     });
-    isPasswordModalVisible.value = preset.value !== 'factory';
+    if (preset.value !== 'factory') {
+      passwordAcknowledged.value = false;
+      isPasswordModalVisible.value = true;
+    }
     console.log('Sync complete: ', data);
   } catch (error) {
     const errorMessage =
@@ -311,6 +322,7 @@ async function syncUserAddons() {
 }
 
 function closePasswordModal() {
+  if (!passwordAcknowledged.value) return;
   isPasswordModalVisible.value = false;
   document.body.classList.remove('modal-open');
 }
@@ -318,6 +330,18 @@ function closePasswordModal() {
 function copyPassword() {
   navigator.clipboard.writeText(generatedPassword.value);
   addNotification(t('password_copied'), 'success');
+}
+
+function downloadPassword() {
+  const blob = new Blob([generatedPassword.value], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'stremio-addon-password.txt';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 function removeAddon(idx) {
@@ -357,7 +381,7 @@ async function loadCurrentAccountAddons() {
     const response = await getAddonCollection(
       props.platform,
       key,
-      selectedNuvioProfileId.value || 1
+      selectedNuvioProfileId.value ?? 1
     );
     const currentAddons = extractAddonList(response);
 
@@ -426,7 +450,7 @@ function saveManifestEdit(updatedManifest) {
     addons.value[currentEditIdx.value].manifest = updatedManifest;
     closeEditModal();
   } catch (e) {
-    addNotification(t('failed_update_manifest', 'error'));
+    addNotification(t('failed_update_manifest'), 'error');
   }
 }
 
@@ -1461,6 +1485,18 @@ watch(
           No addons loaded yet. Load a preset or load the current account addons
           first.
         </p>
+        <div
+          v-if="addonBuildErrors.length > 0"
+          class="alert alert-warning mb-3 flex-col items-start"
+          role="alert"
+        >
+          <p class="font-semibold">{{ $t('addon_build_errors_title') }}</p>
+          <ul class="list-disc pl-5 text-sm">
+            <li v-for="(error, idx) in addonBuildErrors" :key="idx">
+              {{ error }}
+            </li>
+          </ul>
+        </div>
         <draggable
           :list="addons"
           item-key="transportUrl"
@@ -1522,6 +1558,7 @@ watch(
     <div class="modal-box">
       <button
         class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
+        :disabled="!passwordAcknowledged"
         @click="closePasswordModal"
       >
         ✕
@@ -1533,11 +1570,28 @@ watch(
       >
         {{ generatedPassword }}
       </div>
-      <div class="modal-action">
+      <div class="flex flex-wrap gap-2 mb-4">
         <button class="btn btn-primary" @click="copyPassword">
           {{ $t('password_copy') }}
         </button>
-        <button class="btn" @click="closePasswordModal">
+        <button class="btn" @click="downloadPassword">
+          {{ $t('password_download') }}
+        </button>
+      </div>
+      <label class="label cursor-pointer justify-start gap-2 mb-2">
+        <input
+          v-model="passwordAcknowledged"
+          type="checkbox"
+          class="checkbox checkbox-sm"
+        />
+        <span class="label-text">{{ $t('password_acknowledge') }}</span>
+      </label>
+      <div class="modal-action">
+        <button
+          class="btn"
+          :disabled="!passwordAcknowledged"
+          @click="closePasswordModal"
+        >
           {{ $t('close') }}
         </button>
       </div>

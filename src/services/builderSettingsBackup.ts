@@ -11,6 +11,7 @@ export type BuilderSettings = {
   options: string[];
   maxSize: string | number;
   advancedOptions: Record<string, string>;
+  password?: string;
 };
 
 export type BuilderSettingsBackup = {
@@ -47,7 +48,8 @@ const DEFAULT_SETTINGS: BuilderSettings = {
     topPosterKey: '',
     mdblistKey: '',
     publicMetaDbKey: ''
-  }
+  },
+  password: ''
 };
 
 const stringArray = (value: unknown, fallback: string[] = []): string[] =>
@@ -67,7 +69,7 @@ const normalizeDebridEntries = (
       service: typeof entry?.service === 'string' ? entry.service : '',
       key: typeof entry?.key === 'string' ? entry.key : ''
     }))
-    .filter((entry) => entry.service || entry.key);
+    .filter((entry) => entry.service && entry.key);
 
   return entries.length > 0 ? entries : DEFAULT_SETTINGS.debridEntries;
 };
@@ -106,7 +108,11 @@ export function normalizeBuilderSettings(value: unknown): BuilderSettings {
     advancedOptions: {
       ...DEFAULT_SETTINGS.advancedOptions,
       ...Object.fromEntries(advancedEntries)
-    }
+    },
+    password:
+      typeof candidate.password === 'string'
+        ? candidate.password
+        : DEFAULT_SETTINGS.password
   };
 }
 
