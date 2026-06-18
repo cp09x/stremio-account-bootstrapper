@@ -2,7 +2,10 @@
 import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { loginUser, createUser } from '../api/platformApi';
-import { QuestionMarkCircleIcon } from '@heroicons/vue/24/outline';
+import {
+  QuestionMarkCircleIcon,
+  UserCircleIcon
+} from '@heroicons/vue/24/outline';
 import HowGetAuthKey from './HowGetAuthKey.vue';
 import { addNotification } from '../composables/useNotifications';
 
@@ -85,10 +88,27 @@ function emitAuthKey(source = 'manual') {
 </script>
 
 <template>
-  <section id="authentication" class="max-w-4xl mx-auto p-4">
-    <h3 class="text-2xl font-bold mb-6">{{ $t('authentication') }}</h3>
+  <section
+    id="phase-connect"
+    class="scroll-mt-24 lg:scroll-mt-8 max-w-4xl mx-auto px-4 py-8"
+  >
+    <header class="mb-6 flex items-center gap-3">
+      <span
+        class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"
+      >
+        <UserCircleIcon class="h-6 w-6" />
+      </span>
+      <div>
+        <h2 class="font-serif text-2xl font-bold text-base-content">
+          {{ $t('phase_connect') }}
+        </h2>
+        <p class="text-sm text-base-content/60">
+          {{ $t('phase_connect_desc') }}
+        </p>
+      </div>
+    </header>
 
-    <div class="bg-base-100 p-6 rounded-lg border border-base-300">
+    <div class="rounded-xl border border-base-300 bg-base-100 p-6 shadow-sm">
       <div class="space-y-4">
         <div class="form-control">
           <div class="join w-full">
@@ -96,9 +116,7 @@ function emitAuthKey(source = 'manual') {
               type="button"
               class="btn join-item flex-1"
               :class="
-                selectedPlatform === 'stremio'
-                  ? 'btn-primary'
-                  : 'btn-outline border-gray-300'
+                selectedPlatform === 'stremio' ? 'btn-primary' : 'btn-outline'
               "
               @click="selectedPlatform = 'stremio'"
             >
@@ -108,9 +126,7 @@ function emitAuthKey(source = 'manual') {
               type="button"
               class="btn join-item flex-1"
               :class="
-                selectedPlatform === 'nuvio'
-                  ? 'btn-primary'
-                  : 'btn-outline border-gray-300'
+                selectedPlatform === 'nuvio' ? 'btn-primary' : 'btn-outline'
               "
               @click="selectedPlatform = 'nuvio'"
             >
