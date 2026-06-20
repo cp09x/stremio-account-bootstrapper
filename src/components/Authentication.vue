@@ -4,7 +4,9 @@ import { useI18n } from 'vue-i18n';
 import { loginUser, createUser } from '../api/platformApi';
 import {
   QuestionMarkCircleIcon,
-  UserCircleIcon
+  UserCircleIcon,
+  EyeIcon,
+  EyeSlashIcon
 } from '@heroicons/vue/24/outline';
 import HowGetAuthKey from './HowGetAuthKey.vue';
 import { addNotification } from '../composables/useNotifications';
@@ -22,6 +24,9 @@ const authKey = ref('');
 const email = ref('');
 const password = ref('');
 const loggedIn = ref(false);
+const isLoggingIn = ref(false);
+const isRegistering = ref(false);
+const showAuthKey = ref(false);
 const selectedPlatform = ref(props.platform);
 const emits = defineEmits(['auth-key', 'platform-change']);
 
@@ -44,6 +49,8 @@ watch(selectedPlatform, (nextPlatform) => {
 });
 
 function loginUserPassword() {
+  if (isLoggingIn.value) return;
+  isLoggingIn.value = true;
   loginUser(selectedPlatform.value, email.value, password.value)
     .then((data) => {
       if (data?.result?.authKey) {
@@ -57,10 +64,15 @@ function loginUserPassword() {
     .catch((err) => {
       console.error(err);
       addNotification(err?.message || t('login_failed'), 'error');
+    })
+    .finally(() => {
+      isLoggingIn.value = false;
     });
 }
 
 function createAccount() {
+  if (isRegistering.value) return;
+  isRegistering.value = true;
   createUser(selectedPlatform.value, email.value, password.value)
     .then((data) => {
       if (data?.result?.authKey) {
@@ -75,6 +87,9 @@ function createAccount() {
     .catch((err) => {
       console.error(err);
       addNotification(err?.message || t('register_failed'), 'error');
+    })
+    .finally(() => {
+      isRegistering.value = false;
     });
 }
 
@@ -136,7 +151,13 @@ function emitAuthKey(source = 'manual') {
         </div>
 
         <div class="form-control">
+          <label class="label" for="auth-email">
+            <span class="label-text">{{
+              $t('label_email', { platform: platformLabel })
+            }}</span>
+          </label>
           <input
+            id="auth-email"
             type="text"
             v-model="email"
             :placeholder="$t('stremio_email', { platform: platformLabel })"
@@ -145,7 +166,13 @@ function emitAuthKey(source = 'manual') {
         </div>
 
         <div class="form-control">
+          <label class="label" for="auth-password">
+            <span class="label-text">{{
+              $t('label_password', { platform: platformLabel })
+            }}</span>
+          </label>
           <input
+            id="auth-password"
             type="password"
             v-model="password"
             :placeholder="$t('stremio_password', { platform: platformLabel })"
@@ -157,16 +184,26 @@ function emitAuthKey(source = 'manual') {
           <button
             class="btn btn-primary"
             @click="loginUserPassword"
-            :disabled="!email || !password"
+            :disabled="!email || !password || isLoggingIn"
           >
+            <span
+              v-if="isLoggingIn"
+              class="loading loading-spinner"
+              aria-hidden="true"
+            ></span>
             {{ loggedIn ? $t('logged_in') : $t('login') }}
           </button>
 
           <button
             class="btn btn-secondary"
             @click="createAccount"
-            :disabled="!email || !password"
+            :disabled="!email || !password || isRegistering"
           >
+            <span
+              v-if="isRegistering"
+              class="loading loading-spinner"
+              aria-hidden="true"
+            ></span>
             {{ $t('signup') }}
           </button>
         </div>
@@ -176,9 +213,9 @@ function emitAuthKey(source = 'manual') {
         </div>
 
         <div v-if="selectedPlatform === 'stremio'" class="form-control">
-          <label class="label">
+          <label class="label" for="auth-key">
             <span class="label-text">{{
-              $t('paste_authkey', { platform: platformLabel })
+              $t('label_authkey', { platform: platformLabel })
             }}</span>
             <button
               v-if="selectedPlatform === 'stremio'"
@@ -189,13 +226,31 @@ function emitAuthKey(source = 'manual') {
               <QuestionMarkCircleIcon class="h-5 w-5 text-primary" />
             </button>
           </label>
-          <input
-            type="password"
-            v-model="authKey"
-            v-on:input="emitAuthKey('manual')"
-            :placeholder="$t('paste_authkey', { platform: platformLabel })"
-            class="input input-bordered w-full"
-          />
+          <div class="relative">
+            <input
+              id="auth-key"
+              :type="showAuthKey ? 'text' : 'password'"
+              v-model="authKey"
+              v-on:input="emitAuthKey('manual')"
+              :placeholder="$t('paste_authkey', { platform: platformLabel })"
+              class="input input-bordered w-full pr-12"
+            />
+            <button
+              type="button"
+              class="absolute inset-y-0 right-0 flex items-center px-3 text-base-content/60 hover:text-base-content cursor-pointer"
+              :aria-label="
+                showAuthKey ? $t('aria_hide_value') : $t('aria_show_value')
+              "
+              @click="showAuthKey = !showAuthKey"
+            >
+              <EyeSlashIcon
+                v-if="showAuthKey"
+                class="h-5 w-5"
+                aria-hidden="true"
+              />
+              <EyeIcon v-else class="h-5 w-5" aria-hidden="true" />
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -60,37 +60,43 @@ function openEditManifestModal() {
 
 <template>
   <div
-    class="item flex items-center justify-between flex-wrap rounded-lg p-3 mb-3 border border-gray-300 bg-base-200 relative cursor-move"
+    class="item flex items-center justify-between flex-wrap rounded-lg p-3 mb-3 border border-base-300 bg-base-200 relative cursor-move"
   >
-    <div class="col-8 flex-1">
-      <div class="details flex items-center">
+    <div class="col-8 flex-1 min-w-0">
+      <div class="details flex items-center min-w-0">
         <div class="logo_container">
           <img
             :src="logoURL || defaultLogo"
-            class="h-15 w-15 pointer-events-none mr-3 object-contain object-center rounded-[30%] bg-gray-800"
+            class="h-12 w-12 pointer-events-none mr-3 object-contain object-center rounded-[30%] bg-[#1e1b16]"
           />
         </div>
-        <span class="text-base font-medium text-no">{{ name }}</span>
+        <span
+          class="text-base font-medium text-base-content truncate min-w-0"
+          >{{ name }}</span
+        >
       </div>
     </div>
     <div class="col flex gap-2 flex-wrap items-center mt-2 md:mt-0">
       <button
-        class="button icon-only copy-url flex justify-center items-center rounded px-2 py-1 transition-colors hover:bg-gray-100 cursor-pointer"
+        class="button icon-only copy-url flex justify-center items-center rounded px-2 py-1 transition-colors hover:bg-base-300 cursor-pointer"
         title="Copy addon manifest URL to clipboard"
+        aria-label="Copy addon manifest URL to clipboard"
         @click="copyManifestURLToClipboard"
       >
         <ClipboardDocumentIcon class="w-5 h-5" />
       </button>
       <button
-        class="button icon-only edit-manifest flex justify-center items-center rounded px-2 py-1 transition-colors hover:bg-gray-100 cursor-pointer"
+        class="button icon-only edit-manifest flex justify-center items-center rounded px-2 py-1 transition-colors hover:bg-base-300 cursor-pointer"
         title="Edit manifest JSON"
+        aria-label="Edit manifest JSON"
         @click="openEditManifestModal"
       >
         <PencilSquareIcon class="w-5 h-5" />
       </button>
       <button
-        class="button icon-only delete flex justify-center items-center rounded px-2 py-1 transition-colors hover:bg-gray-100 disabled:opacity-50 cursor-pointer"
+        class="button icon-only delete flex justify-center items-center rounded px-2 py-1 transition-colors hover:bg-base-300 disabled:opacity-50 cursor-pointer"
         title="Remove addon from list"
+        aria-label="Remove addon from list"
         :disabled="!isDeletable"
         @click="removeAddon"
       >
@@ -98,7 +104,7 @@ function openEditManifestModal() {
       </button>
     </div>
     <i
-      class="uil uil-draggabledots absolute right-2 bottom-2 text-xl text-gray-400 md:static md:ml-4"
+      class="uil uil-draggabledots absolute right-2 bottom-2 text-xl text-base-content/40 md:static md:ml-4"
     ></i>
   </div>
 </template>

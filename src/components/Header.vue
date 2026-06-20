@@ -20,7 +20,7 @@ defineProps({
 </script>
 
 <template>
-  <div class="hero min-h-[350px] bg-gradient-to-r from-primary to-warning">
+  <div class="hero min-h-[350px] bg-gradient-to-r from-primary to-accent">
     <div class="hero-content text-center">
       <div class="max-w-lg">
         <img :src="addonLogo" :alt="addonName" class="w-32 h-32 mx-auto my-4" />

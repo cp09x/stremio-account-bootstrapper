@@ -15,6 +15,7 @@ import {
   parseBuilderSettingsBackup
 } from '../services/builderSettingsBackup';
 import { extractBuilderSettingsFromAddons } from '../services/builderSettingsFromAddons';
+import { diffAddonCollections } from '../utils/addonDiff.ts';
 import { debridServicesInfo } from '../utils/debrid';
 import { ArchiveBoxIcon } from '@heroicons/vue/24/outline';
 
@@ -37,6 +38,9 @@ const lastRestore = ref(null);
 const preRestoreSnapshot = ref(null);
 const undoingRestore = ref(false);
 const undoConfirmVisible = ref(false);
+const restoreConfirmVisible = ref(false);
+const restoreDiff = ref(null);
+const pendingRestore = ref(null);
 const { track } = useAnalytics();
 
 const platformLabel = computed(() =>
@@ -166,7 +170,7 @@ async function restoreConfigFile(event) {
         importedAt: new Date().toISOString(),
         settings
       });
-      addNotification('Builder settings imported into the form', 'success');
+      addNotification(t('builder_settings_imported'), 'success');
       return;
     }
 
@@ -180,6 +184,40 @@ async function restoreConfigFile(event) {
       console.error('Failed to snapshot account before restore', snapshotError);
     }
 
+    restoreDiff.value = diffAddonCollections(
+      preRestoreSnapshot.value || [],
+      backup.addons
+    );
+    pendingRestore.value = { file, backup };
+    restoreConfirmVisible.value = true;
+  } catch (e) {
+    error.value = e?.message || String(e);
+    addNotification(error.value || t('restore_failed'), 'error');
+  } finally {
+    loadingRestore.value = false;
+    event.target.value = '';
+  }
+}
+
+function cancelRestore() {
+  restoreConfirmVisible.value = false;
+  restoreDiff.value = null;
+  pendingRestore.value = null;
+}
+
+async function confirmRestore() {
+  const pending = pendingRestore.value;
+  if (!authKey || !pending) {
+    cancelRestore();
+    return;
+  }
+
+  const { file, backup } = pending;
+  restoreConfirmVisible.value = false;
+  loadingRestore.value = true;
+  error.value = null;
+
+  try {
     const restoreResponse = await setAddonCollection(
       platform,
       backup.addons,
@@ -251,7 +289,8 @@ async function restoreConfigFile(event) {
     addNotification(error.value || t('restore_failed'), 'error');
   } finally {
     loadingRestore.value = false;
-    event.target.value = '';
+    restoreDiff.value = null;
+    pendingRestore.value = null;
   }
 }
 
@@ -293,32 +332,28 @@ async function confirmUndoRestore() {
 </script>
 
 <template>
-  <section id="backup" class="max-w-4xl mx-auto px-4 py-4">
+  <section id="backup" class="max-w-4xl mx-auto px-4 py-8">
     <div
       class="collapse collapse-arrow rounded-xl border border-base-300 bg-base-200/60"
     >
       <input type="checkbox" />
       <div class="collapse-title flex items-center gap-3">
-        <ArchiveBoxIcon class="h-5 w-5 shrink-0 text-base-content/70" />
+        <span
+          class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-accent"
+        >
+          <ArchiveBoxIcon class="h-5 w-5" />
+        </span>
         <div>
           <p class="font-serif text-base font-semibold text-base-content">
-            {{ $t('backup_restore') }}
+            {{ $t('account_addons_file_title') }}
           </p>
           <p class="text-sm text-base-content/60">
-            Backup and restore the addon collection installed in your account.
+            {{ $t('account_addons_file_desc') }}
           </p>
         </div>
       </div>
       <div class="collapse-content">
         <div class="pt-2">
-          <div class="mb-4">
-            <p class="font-semibold">Installed account addons</p>
-            <p class="mt-1 text-sm text-base-content/60">
-              Backup and restore the addon collection installed in your account.
-              Use Review &amp; Apply → Tools → Builder settings when you need to
-              export or import editable API keys and preset fields.
-            </p>
-          </div>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <button
@@ -402,12 +437,12 @@ async function confirmUndoRestore() {
                 v-if="lastRestore.addonNames.length > 12"
                 class="badge badge-ghost"
               >
-                +{{ lastRestore.addonNames.length - 12 }} more
+                +{{ lastRestore.addonNames.length - 12 }} {{ $t('more') }}
               </span>
             </div>
 
             <div
-              class="mt-3 rounded border p-3 text-sm"
+              class="mt-3 rounded-lg border p-3 text-sm"
               :class="
                 lastRestore.extractedDebridServices.length > 0
                   ? 'border-success/40 bg-success/10'
@@ -451,7 +486,7 @@ async function confirmUndoRestore() {
 
             <div
               v-if="lastRestore.missingAddonNames.length > 0"
-              class="mt-3 rounded border border-warning/40 bg-warning/10 p-3 text-sm"
+              class="mt-3 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm"
             >
               <p class="font-semibold text-warning">
                 Missing after account verification
@@ -467,6 +502,95 @@ async function confirmUndoRestore() {
       </div>
     </div>
   </section>
+
+  <!-- Pre-restore diff confirmation modal -->
+  <dialog v-if="restoreConfirmVisible" class="modal modal-open">
+    <div class="modal-box w-11/12 max-w-2xl">
+      <button
+        class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
+        @click="cancelRestore"
+      >
+        ✕
+      </button>
+      <h3 class="font-bold text-lg mb-2">
+        {{ $t('restore_confirm_title', { platform: platformLabel }) }}
+      </h3>
+      <p class="mb-4 text-sm opacity-80">
+        {{ $t('restore_confirm_message', { platform: platformLabel }) }}
+      </p>
+
+      <div v-if="restoreDiff" class="space-y-4">
+        <div class="flex flex-wrap gap-2">
+          <span class="badge badge-success">
+            {{ $t('sync_diff_added') }}: {{ restoreDiff.added.length }}
+          </span>
+          <span class="badge badge-error">
+            {{ $t('sync_diff_removed') }}: {{ restoreDiff.removed.length }}
+          </span>
+          <span class="badge badge-ghost">
+            {{ $t('sync_diff_kept') }}: {{ restoreDiff.kept.length }}
+          </span>
+          <span v-if="restoreDiff.reordered" class="badge badge-warning">
+            {{ $t('sync_diff_reordered') }}
+          </span>
+        </div>
+
+        <div v-if="restoreDiff.added.length > 0">
+          <p class="font-semibold text-success">{{ $t('sync_diff_added') }}</p>
+          <ul class="mt-1 list-disc pl-5 text-sm">
+            <li v-for="name in restoreDiff.added" :key="`add-${name}`">
+              {{ name }}
+            </li>
+          </ul>
+        </div>
+
+        <div v-if="restoreDiff.removed.length > 0">
+          <p class="font-semibold text-error">{{ $t('sync_diff_removed') }}</p>
+          <ul class="mt-1 list-disc pl-5 text-sm">
+            <li v-for="name in restoreDiff.removed" :key="`rem-${name}`">
+              {{ name }}
+            </li>
+          </ul>
+        </div>
+
+        <div v-if="restoreDiff.kept.length > 0">
+          <p class="font-semibold opacity-80">{{ $t('sync_diff_kept') }}</p>
+          <div class="mt-1 flex flex-wrap gap-2">
+            <span
+              v-for="name in restoreDiff.kept.slice(0, 12)"
+              :key="`kept-${name}`"
+              class="badge badge-outline"
+            >
+              {{ name }}
+            </span>
+            <span v-if="restoreDiff.kept.length > 12" class="badge badge-ghost">
+              +{{ restoreDiff.kept.length - 12 }} {{ $t('more') }}
+            </span>
+          </div>
+        </div>
+
+        <p
+          v-if="
+            restoreDiff.added.length === 0 &&
+            restoreDiff.removed.length === 0 &&
+            !restoreDiff.reordered
+          "
+          class="text-sm text-warning"
+        >
+          {{ $t('sync_diff_no_changes') }}
+        </p>
+      </div>
+
+      <div class="modal-action">
+        <button class="btn" @click="cancelRestore">
+          {{ $t('cancel') }}
+        </button>
+        <button class="btn btn-primary" @click="confirmRestore">
+          {{ $t('restore_confirm_apply', { platform: platformLabel }) }}
+        </button>
+      </div>
+    </div>
+  </dialog>
 
   <!-- Undo restore confirmation modal -->
   <dialog v-if="undoConfirmVisible" class="modal modal-open">

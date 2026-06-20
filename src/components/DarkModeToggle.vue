@@ -4,11 +4,12 @@
       type="checkbox"
       class="theme-controller"
       value="mossdark"
+      :aria-label="$t('aria_toggle_theme')"
       @change="toggleTheme"
     />
 
-    <SunIcon class="swap-off w-6 h-6" />
-    <MoonIcon class="swap-on w-6 h-6" />
+    <SunIcon class="swap-off w-6 h-6" aria-hidden="true" />
+    <MoonIcon class="swap-on w-6 h-6" aria-hidden="true" />
   </label>
 </template>
 
