@@ -17,7 +17,9 @@ import {
   Squares2X2Icon,
   AdjustmentsHorizontalIcon,
   ListBulletIcon,
-  CheckIcon
+  CheckIcon,
+  ArrowDownIcon,
+  ChevronRightIcon
 } from '@heroicons/vue/24/outline';
 
 const { t } = useI18n();
@@ -101,6 +103,13 @@ function scrollToPhase(id) {
     behavior: prefersReducedMotion() ? 'auto' : 'smooth',
     block: 'start'
   });
+  // Move focus to the destination so keyboard/SR users land on the section
+  // (also makes the skip-link actually move focus, not just scroll). The phase
+  // sections are non-interactive, so make them programmatically focusable.
+  if (!el.hasAttribute('tabindex')) {
+    el.setAttribute('tabindex', '-1');
+  }
+  el.focus({ preventScroll: true });
 }
 
 let observer = null;
@@ -198,7 +207,7 @@ onBeforeUnmount(() => {
             :class="
               activePhaseId === phase.id
                 ? 'bg-primary/10 text-primary'
-                : 'text-base-content/50 hover:text-base-content'
+                : 'text-base-content/70 hover:text-base-content'
             "
             :aria-current="activePhaseId === phase.id ? 'step' : undefined"
             @click="scrollToPhase(phase.id)"
@@ -216,7 +225,12 @@ onBeforeUnmount(() => {
               <CheckIcon v-if="index < activePhaseIndex" class="h-3 w-3" />
               <template v-else>{{ index + 1 }}</template>
             </span>
-            <span class="hidden truncate sm:inline">{{ $t(phase.label) }}</span>
+            <span
+              class="truncate sm:inline"
+              :class="activePhaseId === phase.id ? 'inline' : 'hidden'"
+            >
+              {{ $t(phase.label) }}
+            </span>
           </button>
         </li>
       </ol>
@@ -243,7 +257,7 @@ onBeforeUnmount(() => {
     <aside class="hidden w-56 shrink-0 lg:block">
       <nav class="sticky top-24 py-8" :aria-label="$t('progress_label')">
         <p
-          class="mb-4 px-2 text-xs font-semibold uppercase tracking-wide text-base-content/50"
+          class="mb-4 px-2 text-xs font-semibold uppercase tracking-wide text-base-content/70"
         >
           {{ $t('progress_label') }}
         </p>
@@ -255,7 +269,7 @@ onBeforeUnmount(() => {
               :class="
                 activePhaseId === phase.id
                   ? 'bg-primary/10 text-primary'
-                  : 'text-base-content/60 hover:bg-base-200 hover:text-base-content'
+                  : 'text-base-content/70 hover:bg-base-200 hover:text-base-content'
               "
               :aria-current="activePhaseId === phase.id ? 'step' : undefined"
               @click="scrollToPhase(phase.id)"
@@ -267,7 +281,7 @@ onBeforeUnmount(() => {
                     ? 'border-primary bg-primary text-primary-content'
                     : activePhaseId === phase.id
                       ? 'border-primary text-primary'
-                      : 'border-base-300 text-base-content/50'
+                      : 'border-base-300 text-base-content/70'
                 "
               >
                 <CheckIcon v-if="index < activePhaseIndex" class="h-4 w-4" />
@@ -321,30 +335,61 @@ onBeforeUnmount(() => {
           {{ $t('action_bar_ready_to_load') }}
         </template>
       </p>
+      <!--
+        These buttons only scroll (navigation), they do NOT sync/load. The
+        real Sync/Load actions live inside the phases (Configuration.vue), so
+        these are styled as navigation (ghost/outline) and labeled with the
+        destination phase + a directional icon to avoid looking like the
+        primary destructive action.
+      -->
       <div class="flex flex-col gap-2 sm:flex-row">
         <button
           type="button"
-          class="btn btn-outline btn-sm sm:btn-md"
+          class="btn btn-ghost btn-sm sm:btn-md"
           @click="scrollToPhase('phase-customize')"
         >
-          {{ $t('load_addons_preset') }}
+          {{ $t('phase_customize') }}
+          <ChevronRightIcon class="h-4 w-4" />
         </button>
         <button
           type="button"
-          class="btn btn-primary btn-sm sm:btn-md"
+          class="btn btn-outline btn-sm sm:btn-md"
           @click="scrollToPhase('phase-review')"
         >
-          {{
-            $t('sync_to_stremio', {
-              platform: selectedPlatform === 'nuvio' ? 'Nuvio' : 'Stremio'
-            })
-          }}
+          {{ $t('phase_review') }}
+          <ArrowDownIcon class="h-4 w-4" />
         </button>
       </div>
     </div>
   </div>
 
-  <footer class="pb-24">
+  <!--
+    The action bar is fixed at the bottom and is tallest at narrow widths,
+    where the status text + two buttons stack vertically. Reserve enough
+    bottom padding so the footer's last row never sits under the bar at 375px,
+    then shrink it once the bar collapses to a single row at sm/lg.
+  -->
+  <footer class="pb-44 sm:pb-28 lg:pb-24">
     <Footer />
   </footer>
 </template>
+
+<style>
+/*
+ * Sticky-offset for in-page anchor/scrollToPhase navigation. Set on the
+ * scrolling root so phase headings clear the sticky chrome instead of landing
+ * under it. Below lg the sticky chrome is the top bar (~56px) + the mobile
+ * stepper (~44px) ≈ 100px, so reserve 104px. At lg+ the stepper is hidden
+ * (only the top bar remains), matching the sections' lg:scroll-mt-8 (32px).
+ * This overrides the per-section scroll-mt-24 (96px) that was too small.
+ */
+html {
+  scroll-padding-top: 104px;
+}
+
+@media (min-width: 1024px) {
+  html {
+    scroll-padding-top: 2rem;
+  }
+}
+</style>

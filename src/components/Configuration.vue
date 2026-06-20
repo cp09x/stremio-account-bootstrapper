@@ -1,5 +1,12 @@
 <script setup>
-import { ref, computed, watch } from 'vue';
+import {
+  ref,
+  computed,
+  watch,
+  nextTick,
+  onMounted,
+  onBeforeUnmount
+} from 'vue';
 import { useI18n } from 'vue-i18n';
 import draggable from 'vuedraggable';
 import AddonItem from './AddonItem.vue';
@@ -12,7 +19,9 @@ import {
   KeyIcon,
   AdjustmentsHorizontalIcon,
   ListBulletIcon,
-  Cog6ToothIcon
+  Cog6ToothIcon,
+  PlusIcon,
+  MinusIcon
 } from '@heroicons/vue/24/outline';
 import { addNotification } from '../composables/useNotifications';
 import { useAnalytics } from '../composables/useAnalytics';
@@ -190,6 +199,59 @@ const languageOptions = [
 // Presentational-only: controls the advanced-keys accordion (collapsed default).
 const isAdvancedKeysOpen = ref(false);
 
+// Refs used to focus a specific field when the health panel emits `focus-field`.
+// Advanced-key inputs are keyed by their validator id (== advancedOptions prop).
+const advancedKeyInputRefs = ref({});
+// Debrid <select> elements, keyed by entry index.
+const debridServiceRefs = ref({});
+
+function setAdvancedKeyInputRef(id, el) {
+  if (el) advancedKeyInputRefs.value[id] = el;
+  else delete advancedKeyInputRefs.value[id];
+}
+
+function setDebridServiceRef(idx, el) {
+  if (el) debridServiceRefs.value[idx] = el;
+  else delete debridServiceRefs.value[idx];
+}
+
+const ADVANCED_OPTION_IDS = [
+  'rpdbKey',
+  'tmdbKey',
+  'tmdbAccessToken',
+  'tvdbKey',
+  'fanartKey',
+  'geminiKey',
+  'topPosterKey',
+  'mdblistKey',
+  'publicMetaDbKey'
+];
+
+// The health panel reports a validator id. For advanced keys the id matches the
+// advancedOptions property; for debrid keys the id is the service name, so we
+// match the entry whose `service` equals the id.
+function focusHealthField(id) {
+  if (ADVANCED_OPTION_IDS.includes(id)) {
+    isAdvancedKeysOpen.value = true;
+  }
+
+  let target = advancedKeyInputRefs.value[id];
+
+  if (!target) {
+    const idx = debridEntries.value.findIndex((entry) => entry.service === id);
+    if (idx !== -1) target = debridServiceRefs.value[idx];
+  }
+
+  if (!target) return;
+
+  nextTick(() => {
+    requestAnimationFrame(() => {
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      target.focus();
+    });
+  });
+}
+
 function currentBuilderSettings() {
   return {
     preset: preset.value,
@@ -219,7 +281,7 @@ function exportBuilderSettings() {
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
-  addNotification('Builder settings exported', 'success');
+  addNotification(t('builder_settings_exported'), 'success');
 }
 
 function openBuilderSettingsFilePicker() {
@@ -253,7 +315,7 @@ function applyBuilderSettings(settings, source = {}) {
       .filter((entry) => entry.service)
       .map((entry) => entry.service)
   };
-  addNotification('Builder settings applied to the form', 'success');
+  addNotification(t('builder_settings_imported'), 'success');
 }
 
 async function importBuilderSettingsFile(event) {
@@ -408,7 +470,9 @@ async function confirmSyncUserAddons() {
     console.log('Sync complete: ', data);
   } catch (error) {
     const errorMessage =
-      error instanceof Error ? error.message : t('failed_syncing_addons');
+      error instanceof Error
+        ? error.message
+        : t('failed_syncing_addons', { platform: platformLabel.value });
     addNotification(errorMessage, 'error');
     console.error('Sync failed', error);
   } finally {
@@ -539,7 +603,10 @@ async function loadCurrentAccountAddons() {
     };
 
     addNotification(
-      `Loaded ${currentAddons.length} current account addons`,
+      t('loaded_account_addons', {
+        count: currentAddons.length,
+        platform: platformLabel.value
+      }),
       'success'
     );
   } catch (error) {
@@ -547,7 +614,7 @@ async function loadCurrentAccountAddons() {
     const errorMessage =
       error instanceof Error
         ? error.message
-        : 'Failed to load current account addons';
+        : t('failed_loading_account_addons', { platform: platformLabel.value });
     addNotification(errorMessage, 'error');
   } finally {
     isLoadingCurrentAccount.value = false;
@@ -714,6 +781,52 @@ watch(
     }
   }
 );
+
+// Refs to each modal's container so we can move focus in on open.
+const syncDiffDialogRef = ref(null);
+const undoDialogRef = ref(null);
+const passwordDialogRef = ref(null);
+const editDialogRef = ref(null);
+
+function focusDialog(dialogEl) {
+  if (!dialogEl) return;
+  nextTick(() => {
+    const focusable = dialogEl.querySelector(
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    );
+    (focusable || dialogEl).focus?.();
+  });
+}
+
+watch(
+  isSyncConfirmVisible,
+  (open) => open && focusDialog(syncDiffDialogRef.value)
+);
+watch(isUndoConfirmVisible, (open) => open && focusDialog(undoDialogRef.value));
+watch(
+  isPasswordModalVisible,
+  (open) => open && focusDialog(passwordDialogRef.value)
+);
+watch(isEditModalVisible, (open) => open && focusDialog(editDialogRef.value));
+
+function handleGlobalKeydown(event) {
+  if (event.key !== 'Escape') return;
+  // Close only the top-most open modal; respect each modal's own close guard.
+  if (isEditModalVisible.value) {
+    closeEditModal();
+  } else if (isPasswordModalVisible.value) {
+    closePasswordModal();
+  } else if (isUndoConfirmVisible.value) {
+    cancelUndoConfirm();
+  } else if (isSyncConfirmVisible.value) {
+    cancelSyncConfirm();
+  }
+}
+
+onMounted(() => document.addEventListener('keydown', handleGlobalKeydown));
+onBeforeUnmount(() =>
+  document.removeEventListener('keydown', handleGlobalKeydown)
+);
 </script>
 
 <template>
@@ -748,7 +861,7 @@ watch(
           <label
             v-for="option in presetOptions"
             :key="option.value"
-            class="group relative flex cursor-pointer flex-col gap-2 rounded-xl border-2 bg-base-100 p-4 shadow-sm transition-colors"
+            class="group relative flex cursor-pointer flex-col gap-2 rounded-xl border-2 bg-base-100 p-4 shadow-sm transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary"
             :class="
               preset === option.value
                 ? 'border-primary bg-primary/5'
@@ -847,11 +960,15 @@ watch(
               :key="idx"
               class="flex flex-col gap-1"
             >
-              <div class="flex items-center gap-2">
+              <label :for="`debrid-key-${idx}`" class="label-text font-medium">
+                {{ $t('label_debrid_key') }}
+              </label>
+              <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
                 <select
                   v-model="entry.service"
+                  :ref="(el) => setDebridServiceRef(idx, el)"
                   @change="() => resetEntryKey(idx)"
-                  class="select select-bordered w-40"
+                  class="select select-bordered w-full sm:w-40"
                 >
                   <option value="">{{ $t('none') }}</option>
                   <option
@@ -864,71 +981,76 @@ watch(
                 </select>
 
                 <input
+                  :id="`debrid-key-${idx}`"
                   v-model="entry.key"
                   :disabled="!entry.service"
+                  :aria-invalid="
+                    !!(entry.key && !isValidApiKey(entry.service, entry.key))
+                  "
+                  :aria-describedby="
+                    entry.key && !isValidApiKey(entry.service, entry.key)
+                      ? `debrid-key-error-${idx}`
+                      : undefined
+                  "
                   :class="{
                     'input-error':
                       entry.key && !isValidApiKey(entry.service, entry.key)
                   }"
                   type="text"
-                  class="input input-bordered flex-1"
+                  class="input input-bordered min-w-0 flex-1 font-mono text-sm"
                   :placeholder="$t('enter_api_key')"
                 />
 
                 <button
                   type="button"
-                  class="btn btn-sm btn-error text-white"
+                  class="btn btn-sm btn-error min-h-[44px] min-w-[44px] text-white"
                   @click="removeDebridEntry(idx)"
                   :disabled="idx === 0"
                   :class="{ 'opacity-50 cursor-not-allowed': idx === 0 }"
-                  :aria-label="$t('remove')"
+                  :aria-label="$t('aria_remove_entry')"
                 >
-                  −
+                  <MinusIcon class="h-5 w-5" aria-hidden="true" />
                 </button>
               </div>
 
-              <div
-                class="w-full grid"
-                :style="{ gridTemplateColumns: '10rem 1fr' }"
-              >
-                <div></div>
-                <div class="flex justify-between items-center w-full">
-                  <span
-                    class="label-text-alt text-error text-xs"
-                    :class="{
-                      invisible: !(
-                        entry.key && !isValidApiKey(entry.service, entry.key)
-                      )
-                    }"
-                  >
-                    {{ $t('invalid_debrid_api_key') }}
-                  </span>
+              <div class="flex w-full items-center justify-between gap-2">
+                <span
+                  :id="`debrid-key-error-${idx}`"
+                  class="label-text-alt text-error text-xs"
+                  :class="{
+                    invisible: !(
+                      entry.key && !isValidApiKey(entry.service, entry.key)
+                    )
+                  }"
+                >
+                  {{ $t('invalid_debrid_api_key') }}
+                </span>
 
-                  <a
-                    :href="debridServicesInfo[entry.service]?.url || '#'"
-                    target="_blank"
-                    class="link link-primary text-sm"
-                    :class="{
-                      invisible: !(
-                        entry.service && debridServicesInfo[entry.service]?.url
-                      )
-                    }"
-                    rel="noreferrer noopener"
-                  >
-                    {{ $t('get_api_key_here') }}
-                  </a>
-                </div>
+                <a
+                  :href="debridServicesInfo[entry.service]?.url || '#'"
+                  target="_blank"
+                  class="link link-primary text-sm"
+                  :class="{
+                    invisible: !(
+                      entry.service && debridServicesInfo[entry.service]?.url
+                    )
+                  }"
+                  rel="noreferrer noopener"
+                >
+                  {{ $t('get_api_key_here') }}
+                </a>
               </div>
             </div>
 
             <div class="flex justify-end items-center gap-2">
               <button
                 type="button"
-                class="btn btn-primary"
+                class="btn btn-primary min-h-[44px] min-w-[44px]"
                 @click="addDebridEntry"
                 :disabled="!canAddDebridEntry"
+                :aria-label="$t('aria_add_entry')"
               >
-                +
+                <PlusIcon class="h-5 w-5" aria-hidden="true" />
               </button>
             </div>
           </div>
@@ -1011,40 +1133,47 @@ watch(
           <div
             v-for="(url, idx) in customAddons"
             :key="idx"
-            class="flex items-center gap-2"
+            class="flex flex-col gap-1"
           >
-            <input
-              v-model="customAddons[idx]"
-              type="text"
-              class="input input-bordered flex-1"
-              :class="{
-                'input-error': url && !isValidManifestUrl(url)
-              }"
-              :placeholder="$t('custom_addon_url')"
-            />
-            <button
-              type="button"
-              class="btn btn-sm btn-error text-white"
-              @click="removeCustomAddon(idx)"
-              :aria-label="$t('remove')"
-              :disabled="idx === 0"
-              :class="{ 'opacity-50 cursor-not-allowed': idx === 0 }"
-            >
-              −
-            </button>
+            <label :for="`custom-addon-${idx}`" class="label-text font-medium">
+              {{ $t('label_custom_addon') }}
+            </label>
+            <div class="flex items-center gap-2">
+              <input
+                :id="`custom-addon-${idx}`"
+                v-model="customAddons[idx]"
+                type="text"
+                class="input input-bordered min-w-0 flex-1 font-mono text-sm"
+                :class="{
+                  'input-error': url && !isValidManifestUrl(url)
+                }"
+                :placeholder="$t('custom_addon_url')"
+              />
+              <button
+                type="button"
+                class="btn btn-sm btn-error min-h-[44px] min-w-[44px] text-white"
+                @click="removeCustomAddon(idx)"
+                :aria-label="$t('aria_remove_entry')"
+                :disabled="idx === 0"
+                :class="{ 'opacity-50 cursor-not-allowed': idx === 0 }"
+              >
+                <MinusIcon class="h-5 w-5" aria-hidden="true" />
+              </button>
+            </div>
           </div>
 
           <div class="flex justify-end items-center gap-2">
             <button
               type="button"
-              class="btn btn-primary"
+              class="btn btn-primary min-h-[44px] min-w-[44px]"
               @click="addCustomAddon"
               :disabled="
                 !canAddCustom ||
                 !isValidManifestUrl(customAddons[customAddons.length - 1])
               "
+              :aria-label="$t('aria_add_entry')"
             >
-              +
+              <PlusIcon class="h-5 w-5" aria-hidden="true" />
             </button>
           </div>
         </div>
@@ -1165,6 +1294,8 @@ watch(
           class="collapse-title flex items-center gap-3"
           role="button"
           tabindex="0"
+          :aria-expanded="isAdvancedKeysOpen"
+          aria-controls="advanced-keys-content"
           @click="isAdvancedKeysOpen = !isAdvancedKeysOpen"
           @keydown.enter.prevent="isAdvancedKeysOpen = !isAdvancedKeysOpen"
           @keydown.space.prevent="isAdvancedKeysOpen = !isAdvancedKeysOpen"
@@ -1179,135 +1310,342 @@ watch(
             </p>
           </div>
         </div>
-        <div class="collapse-content">
+        <div id="advanced-keys-content" class="collapse-content">
           <div
-            class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 pt-2"
+            class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pt-2"
           >
-            <div class="flex items-center gap-2">
-              <input
-                v-model="advancedOptions.rpdbKey"
-                class="input input-bordered w-full"
-                :placeholder="$t('enter_rpdb_key')"
-              />
-              <a
-                target="_blank"
-                href="https://ratingposterdb.com"
-                class="inline-block align-middle"
-              >
-                <QuestionMarkCircleIcon class="h-5 w-5 text-primary" />
-              </a>
+            <div class="flex flex-col gap-1">
+              <label for="adv-rpdbKey" class="label-text font-medium">
+                {{ $t('label_rpdb_key') }}
+              </label>
+              <div class="flex items-center gap-2">
+                <input
+                  id="adv-rpdbKey"
+                  :ref="(el) => setAdvancedKeyInputRef('rpdbKey', el)"
+                  v-model="advancedOptions.rpdbKey"
+                  class="input input-bordered min-w-0 w-full font-mono text-sm"
+                  :placeholder="$t('enter_rpdb_key')"
+                />
+                <VTooltip
+                  placement="auto"
+                  :triggers="['hover', 'click', 'touch']"
+                  :auto-hide="true"
+                  @click.stop
+                >
+                  <a
+                    target="_blank"
+                    href="https://ratingposterdb.com"
+                    rel="noreferrer noopener"
+                    class="inline-block align-middle"
+                    :aria-label="
+                      $t('aria_help_about', { service: 'RatingPosterDB' })
+                    "
+                  >
+                    <QuestionMarkCircleIcon class="h-5 w-5 text-primary" />
+                  </a>
+                  <template #popper>
+                    <div class="text-sm max-w-xs">
+                      {{ $t('help_rpdb_key') }}
+                    </div>
+                  </template>
+                </VTooltip>
+              </div>
             </div>
-            <div class="flex items-center gap-2">
-              <input
-                v-model="advancedOptions.tmdbKey"
-                class="input input-bordered w-full"
-                :placeholder="$t('enter_tmdb_key')"
-              />
-              <a
-                target="_blank"
-                href="https://www.themoviedb.org/settings/api"
-                class="inline-block align-middle"
-              >
-                <QuestionMarkCircleIcon class="h-5 w-5 text-primary" />
-              </a>
+
+            <div class="flex flex-col gap-1">
+              <label for="adv-tmdbKey" class="label-text font-medium">
+                {{ $t('label_tmdb_key') }}
+              </label>
+              <div class="flex items-center gap-2">
+                <input
+                  id="adv-tmdbKey"
+                  :ref="(el) => setAdvancedKeyInputRef('tmdbKey', el)"
+                  v-model="advancedOptions.tmdbKey"
+                  class="input input-bordered min-w-0 w-full font-mono text-sm"
+                  :placeholder="$t('enter_tmdb_key')"
+                />
+                <VTooltip
+                  placement="auto"
+                  :triggers="['hover', 'click', 'touch']"
+                  :auto-hide="true"
+                  @click.stop
+                >
+                  <a
+                    target="_blank"
+                    href="https://www.themoviedb.org/settings/api"
+                    rel="noreferrer noopener"
+                    class="inline-block align-middle"
+                    :aria-label="$t('aria_help_about', { service: 'TMDB' })"
+                  >
+                    <QuestionMarkCircleIcon class="h-5 w-5 text-primary" />
+                  </a>
+                  <template #popper>
+                    <div class="text-sm max-w-xs">
+                      {{ $t('help_tmdb_key') }}
+                    </div>
+                  </template>
+                </VTooltip>
+              </div>
             </div>
-            <div class="flex items-center gap-2">
-              <input
-                v-model="advancedOptions.tmdbAccessToken"
-                class="input input-bordered w-full"
-                :placeholder="$t('enter_tmdb_access_token')"
-              />
-              <a
-                target="_blank"
-                href="https://www.themoviedb.org/settings/api"
-                class="inline-block align-middle"
-              >
-                <QuestionMarkCircleIcon class="h-5 w-5 text-primary" />
-              </a>
+
+            <div class="flex flex-col gap-1">
+              <label for="adv-tmdbAccessToken" class="label-text font-medium">
+                {{ $t('label_tmdb_access_token') }}
+              </label>
+              <div class="flex items-center gap-2">
+                <input
+                  id="adv-tmdbAccessToken"
+                  :ref="(el) => setAdvancedKeyInputRef('tmdbAccessToken', el)"
+                  v-model="advancedOptions.tmdbAccessToken"
+                  class="input input-bordered min-w-0 w-full font-mono text-sm"
+                  :placeholder="$t('enter_tmdb_access_token')"
+                />
+                <VTooltip
+                  placement="auto"
+                  :triggers="['hover', 'click', 'touch']"
+                  :auto-hide="true"
+                  @click.stop
+                >
+                  <a
+                    target="_blank"
+                    href="https://www.themoviedb.org/settings/api"
+                    rel="noreferrer noopener"
+                    class="inline-block align-middle"
+                    :aria-label="$t('aria_help_about', { service: 'TMDB' })"
+                  >
+                    <QuestionMarkCircleIcon class="h-5 w-5 text-primary" />
+                  </a>
+                  <template #popper>
+                    <div class="text-sm max-w-xs">
+                      {{ $t('help_tmdb_access_token') }}
+                    </div>
+                  </template>
+                </VTooltip>
+              </div>
             </div>
-            <div class="flex items-center gap-2">
-              <input
-                v-model="advancedOptions.tvdbKey"
-                class="input input-bordered w-full"
-                :placeholder="$t('enter_tvdb_key')"
-              />
-              <a
-                target="_blank"
-                href="https://thetvdb.com/api-information"
-                class="inline-block align-middle"
-              >
-                <QuestionMarkCircleIcon class="h-5 w-5 text-primary" />
-              </a>
+
+            <div class="flex flex-col gap-1">
+              <label for="adv-tvdbKey" class="label-text font-medium">
+                {{ $t('label_tvdb_key') }}
+              </label>
+              <div class="flex items-center gap-2">
+                <input
+                  id="adv-tvdbKey"
+                  :ref="(el) => setAdvancedKeyInputRef('tvdbKey', el)"
+                  v-model="advancedOptions.tvdbKey"
+                  class="input input-bordered min-w-0 w-full font-mono text-sm"
+                  :placeholder="$t('enter_tvdb_key')"
+                />
+                <VTooltip
+                  placement="auto"
+                  :triggers="['hover', 'click', 'touch']"
+                  :auto-hide="true"
+                  @click.stop
+                >
+                  <a
+                    target="_blank"
+                    href="https://thetvdb.com/api-information"
+                    rel="noreferrer noopener"
+                    class="inline-block align-middle"
+                    :aria-label="$t('aria_help_about', { service: 'TheTVDB' })"
+                  >
+                    <QuestionMarkCircleIcon class="h-5 w-5 text-primary" />
+                  </a>
+                  <template #popper>
+                    <div class="text-sm max-w-xs">
+                      {{ $t('help_tvdb_key') }}
+                    </div>
+                  </template>
+                </VTooltip>
+              </div>
             </div>
-            <div class="flex items-center gap-2">
-              <input
-                v-model="advancedOptions.fanartKey"
-                class="input input-bordered w-full"
-                :placeholder="$t('enter_fanart_key')"
-              />
-              <a
-                target="_blank"
-                href="https://fanart.tv"
-                class="inline-block align-middle"
-              >
-                <QuestionMarkCircleIcon class="h-5 w-5 text-primary" />
-              </a>
+
+            <div class="flex flex-col gap-1">
+              <label for="adv-fanartKey" class="label-text font-medium">
+                {{ $t('label_fanart_key') }}
+              </label>
+              <div class="flex items-center gap-2">
+                <input
+                  id="adv-fanartKey"
+                  :ref="(el) => setAdvancedKeyInputRef('fanartKey', el)"
+                  v-model="advancedOptions.fanartKey"
+                  class="input input-bordered min-w-0 w-full font-mono text-sm"
+                  :placeholder="$t('enter_fanart_key')"
+                />
+                <VTooltip
+                  placement="auto"
+                  :triggers="['hover', 'click', 'touch']"
+                  :auto-hide="true"
+                  @click.stop
+                >
+                  <a
+                    target="_blank"
+                    href="https://fanart.tv"
+                    rel="noreferrer noopener"
+                    class="inline-block align-middle"
+                    :aria-label="
+                      $t('aria_help_about', { service: 'Fanart.tv' })
+                    "
+                  >
+                    <QuestionMarkCircleIcon class="h-5 w-5 text-primary" />
+                  </a>
+                  <template #popper>
+                    <div class="text-sm max-w-xs">
+                      {{ $t('help_fanart_key') }}
+                    </div>
+                  </template>
+                </VTooltip>
+              </div>
             </div>
-            <div class="flex items-center gap-2">
-              <input
-                v-model="advancedOptions.geminiKey"
-                class="input input-bordered w-full"
-                :placeholder="$t('enter_gemini_key')"
-              />
-              <a
-                target="_blank"
-                href="https://aistudio.google.com"
-                class="inline-block align-middle"
-              >
-                <QuestionMarkCircleIcon class="h-5 w-5 text-primary" />
-              </a>
+
+            <div class="flex flex-col gap-1">
+              <label for="adv-geminiKey" class="label-text font-medium">
+                {{ $t('label_gemini_key') }}
+              </label>
+              <div class="flex items-center gap-2">
+                <input
+                  id="adv-geminiKey"
+                  :ref="(el) => setAdvancedKeyInputRef('geminiKey', el)"
+                  v-model="advancedOptions.geminiKey"
+                  class="input input-bordered min-w-0 w-full font-mono text-sm"
+                  :placeholder="$t('enter_gemini_key')"
+                />
+                <VTooltip
+                  placement="auto"
+                  :triggers="['hover', 'click', 'touch']"
+                  :auto-hide="true"
+                  @click.stop
+                >
+                  <a
+                    target="_blank"
+                    href="https://aistudio.google.com"
+                    rel="noreferrer noopener"
+                    class="inline-block align-middle"
+                    :aria-label="
+                      $t('aria_help_about', { service: 'Google Gemini' })
+                    "
+                  >
+                    <QuestionMarkCircleIcon class="h-5 w-5 text-primary" />
+                  </a>
+                  <template #popper>
+                    <div class="text-sm max-w-xs">
+                      {{ $t('help_gemini_key') }}
+                    </div>
+                  </template>
+                </VTooltip>
+              </div>
             </div>
-            <div class="flex items-center gap-2">
-              <input
-                v-model="advancedOptions.topPosterKey"
-                class="input input-bordered w-full"
-                :placeholder="$t('enter_top_poster_key')"
-              />
-              <a
-                target="_blank"
-                href="https://api.top-streaming.stream/user/dashboard"
-                class="inline-block align-middle"
-              >
-                <QuestionMarkCircleIcon class="h-5 w-5 text-primary" />
-              </a>
+
+            <div class="flex flex-col gap-1">
+              <label for="adv-topPosterKey" class="label-text font-medium">
+                {{ $t('label_top_poster_key') }}
+              </label>
+              <div class="flex items-center gap-2">
+                <input
+                  id="adv-topPosterKey"
+                  :ref="(el) => setAdvancedKeyInputRef('topPosterKey', el)"
+                  v-model="advancedOptions.topPosterKey"
+                  class="input input-bordered min-w-0 w-full font-mono text-sm"
+                  :placeholder="$t('enter_top_poster_key')"
+                />
+                <VTooltip
+                  placement="auto"
+                  :triggers="['hover', 'click', 'touch']"
+                  :auto-hide="true"
+                  @click.stop
+                >
+                  <a
+                    target="_blank"
+                    href="https://api.top-streaming.stream/user/dashboard"
+                    rel="noreferrer noopener"
+                    class="inline-block align-middle"
+                    :aria-label="
+                      $t('aria_help_about', { service: 'TOP Posters' })
+                    "
+                  >
+                    <QuestionMarkCircleIcon class="h-5 w-5 text-primary" />
+                  </a>
+                  <template #popper>
+                    <div class="text-sm max-w-xs">
+                      {{ $t('help_top_poster_key') }}
+                    </div>
+                  </template>
+                </VTooltip>
+              </div>
             </div>
-            <div class="flex items-center gap-2">
-              <input
-                v-model="advancedOptions.mdblistKey"
-                class="input input-bordered w-full"
-                :placeholder="$t('enter_mdblist_key')"
-              />
-              <a
-                target="_blank"
-                href="https://mdblist.com/preferences"
-                class="inline-block align-middle"
-              >
-                <QuestionMarkCircleIcon class="h-5 w-5 text-primary" />
-              </a>
+
+            <div class="flex flex-col gap-1">
+              <label for="adv-mdblistKey" class="label-text font-medium">
+                {{ $t('label_mdblist_key') }}
+              </label>
+              <div class="flex items-center gap-2">
+                <input
+                  id="adv-mdblistKey"
+                  :ref="(el) => setAdvancedKeyInputRef('mdblistKey', el)"
+                  v-model="advancedOptions.mdblistKey"
+                  class="input input-bordered min-w-0 w-full font-mono text-sm"
+                  :placeholder="$t('enter_mdblist_key')"
+                />
+                <VTooltip
+                  placement="auto"
+                  :triggers="['hover', 'click', 'touch']"
+                  :auto-hide="true"
+                  @click.stop
+                >
+                  <a
+                    target="_blank"
+                    href="https://mdblist.com/preferences"
+                    rel="noreferrer noopener"
+                    class="inline-block align-middle"
+                    :aria-label="$t('aria_help_about', { service: 'MDBList' })"
+                  >
+                    <QuestionMarkCircleIcon class="h-5 w-5 text-primary" />
+                  </a>
+                  <template #popper>
+                    <div class="text-sm max-w-xs">
+                      {{ $t('help_mdblist_key') }}
+                    </div>
+                  </template>
+                </VTooltip>
+              </div>
             </div>
-            <div class="flex items-center gap-2">
-              <input
-                v-model="advancedOptions.publicMetaDbKey"
-                class="input input-bordered w-full"
-                :placeholder="$t('enter_publicmetadb_key')"
-              />
-              <a
-                target="_blank"
-                href="https://publicmetadb.com"
-                class="inline-block align-middle"
-              >
-                <QuestionMarkCircleIcon class="h-5 w-5 text-primary" />
-              </a>
+
+            <div class="flex flex-col gap-1">
+              <label for="adv-publicMetaDbKey" class="label-text font-medium">
+                {{ $t('label_publicmetadb_key') }}
+              </label>
+              <div class="flex items-center gap-2">
+                <input
+                  id="adv-publicMetaDbKey"
+                  :ref="(el) => setAdvancedKeyInputRef('publicMetaDbKey', el)"
+                  v-model="advancedOptions.publicMetaDbKey"
+                  class="input input-bordered min-w-0 w-full font-mono text-sm"
+                  :placeholder="$t('enter_publicmetadb_key')"
+                />
+                <VTooltip
+                  placement="auto"
+                  :triggers="['hover', 'click', 'touch']"
+                  :auto-hide="true"
+                  @click.stop
+                >
+                  <a
+                    target="_blank"
+                    href="https://publicmetadb.com"
+                    rel="noreferrer noopener"
+                    class="inline-block align-middle"
+                    :aria-label="
+                      $t('aria_help_about', { service: 'PublicMetaDB' })
+                    "
+                  >
+                    <QuestionMarkCircleIcon class="h-5 w-5 text-primary" />
+                  </a>
+                  <template #popper>
+                    <div class="text-sm max-w-xs">
+                      {{ $t('help_publicmetadb_key') }}
+                    </div>
+                  </template>
+                </VTooltip>
+              </div>
             </div>
           </div>
         </div>
@@ -1317,6 +1655,7 @@ watch(
       <ApiHealthPanel
         :debrid-entries="debridEntries"
         :advanced="advancedOptions"
+        @focus-field="focusHealthField"
       />
 
       <!-- Load preset (generates the addon list reviewed in the next phase) -->
@@ -1340,9 +1679,7 @@ watch(
               v-if="isLoadingPreset"
               class="loading loading-spinner loading-sm"
             ></span>
-            {{
-              isLoadingPreset ? $t('loading_addons') : $t('load_addons_preset')
-            }}
+            {{ isLoadingPreset ? $t('loading_addons') : $t('generate_addons') }}
           </button>
 
           <button
@@ -1357,15 +1694,19 @@ watch(
             ></span>
             {{
               isLoadingCurrentAccount
-                ? 'Loading current account'
-                : 'Load current account addons'
+                ? $t('importing_from_account', { platform: platformLabel })
+                : $t('import_from_account', { platform: platformLabel })
             }}
           </button>
         </div>
         <p class="mt-3 text-xs text-base-content/60">
-          Preset loading generates a new setup from the fields above. Current
-          account loading imports the addons already installed in your account
-          into the customization list below.
+          {{ $t('generate_addons_hint') }}
+        </p>
+        <p
+          v-if="hasDebridSelected && !isDebridApiKeyValid"
+          class="mt-1 text-xs text-error"
+        >
+          {{ $t('load_preset_disabled_hint') }}
         </p>
       </fieldset>
     </form>
@@ -1397,14 +1738,16 @@ watch(
       v-if="accountSnapshot"
       class="mb-6 rounded-xl border border-info/30 bg-info/10 p-4"
     >
-      <p class="font-semibold text-info">Account snapshot available</p>
+      <p class="font-semibold text-info">
+        {{ $t('account_snapshot_title', { platform: platformLabel }) }}
+      </p>
       <p class="mt-1 text-sm">
-        {{ accountSnapshot.addonCount }} addons were
         {{
-          accountSnapshot.sourceFormat === 'account'
-            ? 'loaded from the current account'
-            : 'restored to the account'
-        }}.
+          $t('account_snapshot_desc', {
+            count: accountSnapshot.addonCount,
+            platform: platformLabel
+          })
+        }}
       </p>
       <div
         v-if="accountSnapshot.addonNames?.length"
@@ -1421,18 +1764,9 @@ watch(
           v-if="accountSnapshot.addonNames.length > 10"
           class="badge badge-ghost"
         >
-          +{{ accountSnapshot.addonNames.length - 10 }} more
+          +{{ accountSnapshot.addonNames.length - 10 }} {{ $t('more') }}
         </span>
       </div>
-      <p class="mt-3 text-xs text-warning">
-        The fields below are a preset builder. They are not automatically
-        reverse-filled from restored addon URLs or private API keys.
-      </p>
-      <p class="mt-1 text-xs text-warning">
-        Restored API keys stay embedded in the installed private addon URLs.
-        Fill the fields only when you want to generate and overwrite a new
-        preset.
-      </p>
       <div
         v-if="accountSnapshot.missingAddonNames?.length"
         class="mt-3 rounded border border-warning/40 bg-warning/10 p-3 text-sm"
@@ -1457,8 +1791,7 @@ watch(
           {{ $t('step9_customize_addons') }}
         </legend>
         <p v-if="addons.length === 0" class="mb-3 text-sm text-base-content/60">
-          No addons loaded yet. Load a preset or load the current account addons
-          first.
+          {{ $t('addons_empty', { platform: platformLabel }) }}
         </p>
         <div
           v-if="addonBuildErrors.length > 0"
@@ -1549,7 +1882,10 @@ watch(
             {{ isUndoingSync ? $t('undoing_sync') : $t('undo_last_sync') }}
           </button>
         </div>
-        <p class="mt-3 text-xs text-base-content/60">
+        <p class="mt-3 text-xs text-warning">
+          {{ $t('sync_overwrites_hint') }}
+        </p>
+        <p class="mt-1 text-xs text-base-content/60">
           {{ $t('undo_last_sync_hint') }}
         </p>
       </fieldset>
@@ -1560,7 +1896,11 @@ watch(
       >
         <input type="checkbox" />
         <div class="collapse-title flex items-center gap-3">
-          <Cog6ToothIcon class="h-5 w-5 shrink-0 text-base-content/70" />
+          <span
+            class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"
+          >
+            <Cog6ToothIcon class="h-5 w-5" />
+          </span>
           <div>
             <p class="font-serif text-base font-semibold text-base-content">
               {{ $t('tools_title') }}
@@ -1574,11 +1914,11 @@ watch(
               class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between"
             >
               <div class="space-y-1">
-                <p class="text-base font-semibold">Builder settings</p>
+                <p class="text-base font-semibold">
+                  {{ $t('builder_form_file_title') }}
+                </p>
                 <p class="text-sm text-base-content/60">
-                  Export or import the editable form state: debrid keys,
-                  advanced API keys, preset, language, filters, and custom addon
-                  URLs.
+                  {{ $t('builder_form_file_desc') }}
                 </p>
                 <div
                   v-if="lastBuilderSettingsImport"
@@ -1602,14 +1942,14 @@ watch(
                   class="btn btn-outline"
                   @click="exportBuilderSettings"
                 >
-                  Export settings
+                  {{ $t('builder_export') }}
                 </button>
                 <button
                   type="button"
                   class="btn btn-primary"
                   @click="openBuilderSettingsFilePicker"
                 >
-                  Import settings
+                  {{ $t('builder_import') }}
                 </button>
                 <input
                   ref="builderSettingsFileInputRef"
@@ -1621,8 +1961,7 @@ watch(
               </div>
             </div>
             <p class="mt-3 text-xs text-warning">
-              Settings files include visible API keys. Store them like password
-              files.
+              {{ $t('builder_form_contains_secrets') }}
             </p>
           </div>
         </div>
@@ -1632,14 +1971,22 @@ watch(
 
   <!-- Pre-sync diff confirmation modal -->
   <dialog v-if="isSyncConfirmVisible" class="modal modal-open">
-    <div class="modal-box w-11/12 max-w-2xl">
+    <div
+      ref="syncDiffDialogRef"
+      class="modal-box w-11/12 max-w-2xl"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="sync-confirm-title"
+    >
       <button
         class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
         @click="cancelSyncConfirm"
       >
         ✕
       </button>
-      <h3 class="font-bold text-lg mb-2">{{ $t('sync_confirm_title') }}</h3>
+      <h3 id="sync-confirm-title" class="font-bold text-lg mb-2">
+        {{ $t('sync_confirm_title') }}
+      </h3>
       <p class="mb-4 text-sm opacity-80">
         {{ $t('sync_confirm_message', { platform: platformLabel }) }}
       </p>
@@ -1719,14 +2066,22 @@ watch(
 
   <!-- Undo last sync confirmation modal -->
   <dialog v-if="isUndoConfirmVisible" class="modal modal-open">
-    <div class="modal-box">
+    <div
+      ref="undoDialogRef"
+      class="modal-box"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="undo-confirm-title"
+    >
       <button
         class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
         @click="cancelUndoConfirm"
       >
         ✕
       </button>
-      <h3 class="font-bold text-lg mb-2">{{ $t('undo_confirm_title') }}</h3>
+      <h3 id="undo-confirm-title" class="font-bold text-lg mb-2">
+        {{ $t('undo_confirm_title') }}
+      </h3>
       <p class="mb-4 text-sm opacity-80">
         {{ $t('undo_confirm_message', { platform: platformLabel }) }}
       </p>
@@ -1743,7 +2098,13 @@ watch(
 
   <!-- Password Modal -->
   <dialog v-if="isPasswordModalVisible" class="modal modal-open">
-    <div class="modal-box">
+    <div
+      ref="passwordDialogRef"
+      class="modal-box"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="password-modal-title"
+    >
       <button
         class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
         :disabled="!passwordAcknowledged"
@@ -1751,10 +2112,12 @@ watch(
       >
         ✕
       </button>
-      <h3 class="font-bold text-lg mb-4">{{ $t('password_title') }}</h3>
+      <h3 id="password-modal-title" class="font-bold text-lg mb-4">
+        {{ $t('password_title') }}
+      </h3>
       <p class="mb-4">{{ $t('password_message') }}</p>
       <div
-        class="bg-base-200 p-4 rounded-lg mb-4 font-mono text-center text-lg"
+        class="bg-base-200 p-4 rounded-lg mb-4 font-mono text-center text-lg break-all"
       >
         {{ generatedPassword }}
       </div>
@@ -1788,14 +2151,22 @@ watch(
 
   <!-- Edit Modal -->
   <dialog v-if="isEditModalVisible" class="modal modal-open">
-    <div class="modal-box w-11/12 max-w-5xl">
+    <div
+      ref="editDialogRef"
+      class="modal-box w-11/12 max-w-5xl"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="edit-manifest-title"
+    >
       <button
         class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
         @click="closeEditModal"
       >
         ✕
       </button>
-      <h3 class="font-bold text-lg mb-4">{{ $t('edit_manifest') }}</h3>
+      <h3 id="edit-manifest-title" class="font-bold text-lg mb-4">
+        {{ $t('edit_manifest') }}
+      </h3>
       <DynamicForm
         :manifest="currentManifest"
         @update-manifest="saveManifestEdit"

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, onUnmounted } from 'vue';
+import { computed, reactive, watch, onUnmounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import {
   ShieldCheckIcon,
@@ -33,6 +33,10 @@ interface AdvancedKeys {
 const props = defineProps<{
   debridEntries: DebridEntry[];
   advanced: AdvancedKeys;
+}>();
+
+const emit = defineEmits<{
+  (e: 'focus-field', id: string): void;
 }>();
 
 const { t } = useI18n();
@@ -96,6 +100,28 @@ const testableRows = computed<Row[]>(() => {
 
   return rows;
 });
+
+// Tracks the key value last seen for each validator id. When the underlying key
+// changes (the user corrected it), the cached state/result is stale, so we drop
+// it and the row returns to untested.
+const lastSeenKeys = reactive<Record<string, string>>({});
+
+watch(
+  testableRows,
+  (rows) => {
+    for (const row of rows) {
+      if (
+        lastSeenKeys[row.id] !== undefined &&
+        lastSeenKeys[row.id] !== row.key
+      ) {
+        delete states[row.id];
+        delete results[row.id];
+      }
+      lastSeenKeys[row.id] = row.key;
+    }
+  },
+  { deep: true }
+);
 
 const summary = computed(() => {
   let valid = 0;
@@ -236,7 +262,7 @@ function statusLabel(state: RowState | undefined): string {
     </p>
 
     <template v-else>
-      <ul class="divide-y divide-base-300">
+      <ul class="divide-y divide-base-300" aria-live="polite">
         <li
           v-for="row in testableRows"
           :key="row.id"
@@ -266,7 +292,7 @@ function statusLabel(state: RowState | undefined): string {
             />
             <span
               v-else
-              class="h-2.5 w-2.5 rounded-full bg-base-content/20"
+              class="h-2.5 w-2.5 rounded-full bg-base-content/30"
               aria-hidden="true"
             ></span>
           </span>
@@ -278,7 +304,7 @@ function statusLabel(state: RowState | undefined): string {
             <!-- Expiry / plan line for debrid services -->
             <p
               v-if="states[row.id] === 'valid' && expiryLine(row.id)"
-              class="text-xs"
+              class="text-xs tabular-nums"
               :class="
                 expiryLine(row.id)?.urgent
                   ? 'text-warning'
@@ -292,7 +318,7 @@ function statusLabel(state: RowState | undefined): string {
               v-else-if="
                 states[row.id] === 'invalid' || states[row.id] === 'error'
               "
-              class="text-xs"
+              class="text-xs break-words"
               :class="
                 states[row.id] === 'invalid' ? 'text-error' : 'text-warning'
               "
@@ -301,37 +327,52 @@ function statusLabel(state: RowState | undefined): string {
             </p>
           </div>
 
-          <!-- Status badge -->
-          <span
-            class="badge badge-sm shrink-0"
-            :class="{
-              'badge-ghost': !states[row.id] || states[row.id] === 'idle',
-              'badge-ghost animate-pulse': states[row.id] === 'checking',
-              'badge-success': states[row.id] === 'valid',
-              'badge-error': states[row.id] === 'invalid',
-              'badge-warning': states[row.id] === 'error'
-            }"
-          >
-            {{ statusLabel(states[row.id]) }}
-          </span>
+          <!-- Badge + actions stay paired when the row wraps -->
+          <div class="flex shrink-0 items-center gap-2">
+            <!-- Status badge -->
+            <span
+              class="badge badge-sm"
+              :class="{
+                'badge-ghost': !states[row.id] || states[row.id] === 'idle',
+                'badge-ghost animate-pulse': states[row.id] === 'checking',
+                'badge-success': states[row.id] === 'valid',
+                'badge-error': states[row.id] === 'invalid',
+                'badge-warning': states[row.id] === 'error'
+              }"
+            >
+              {{ statusLabel(states[row.id]) }}
+            </span>
 
-          <!-- Per-row check button -->
-          <button
-            type="button"
-            class="btn btn-ghost btn-xs btn-circle cursor-pointer"
-            :aria-label="$t('health_check_one', { service: row.label })"
-            @click="testOne(row)"
-          >
-            <ArrowPathIcon
-              class="h-4 w-4"
-              :class="{ 'animate-spin': states[row.id] === 'checking' }"
-              aria-hidden="true"
-            />
-          </button>
+            <!-- Fix button: jump to the field for an invalid/errored key -->
+            <button
+              v-if="states[row.id] === 'invalid' || states[row.id] === 'error'"
+              type="button"
+              class="btn btn-ghost btn-xs cursor-pointer"
+              :aria-label="$t('health_aria_fix', { service: row.label })"
+              @click="emit('focus-field', row.id)"
+            >
+              {{ $t('health_fix') }}
+            </button>
+
+            <!-- Per-row check button -->
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs btn-circle cursor-pointer"
+              :disabled="states[row.id] === 'checking'"
+              :aria-label="$t('health_check_one', { service: row.label })"
+              @click="testOne(row)"
+            >
+              <ArrowPathIcon
+                class="h-4 w-4"
+                :class="{ 'animate-spin': states[row.id] === 'checking' }"
+                aria-hidden="true"
+              />
+            </button>
+          </div>
         </li>
       </ul>
 
-      <p class="mt-4 text-xs text-base-content/60">
+      <p class="mt-4 text-xs text-base-content/60" aria-live="polite">
         {{
           $t('health_summary', {
             valid: summary.valid,

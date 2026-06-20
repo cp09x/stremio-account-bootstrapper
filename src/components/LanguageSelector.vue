@@ -25,7 +25,12 @@ function changeLanguage(lang) {
 
 <template>
   <div class="dropdown">
-    <div tabindex="0" role="button" class="btn btn-ghost btn-circle">
+    <div
+      tabindex="0"
+      role="button"
+      class="btn btn-ghost btn-circle"
+      :aria-label="$t('aria_select_language')"
+    >
       <LanguageIcon class="w-5 h-5" />
     </div>
     <ul
@@ -33,14 +38,15 @@ function changeLanguage(lang) {
       class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-36"
     >
       <li v-for="lang in languages" :key="lang.code">
-        <a
+        <button
+          type="button"
           @click="changeLanguage(lang.code)"
           :class="{ active: currentLanguage === lang.code }"
           class="flex items-center gap-2"
         >
           <span class="text-lg">{{ lang.flag }}</span>
           {{ lang.name }}
-        </a>
+        </button>
       </li>
     </ul>
   </div>
