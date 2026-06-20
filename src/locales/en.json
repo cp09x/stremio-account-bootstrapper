@@ -296,5 +296,18 @@
   "action_bar_need_auth": "Connect an account to get started.",
   "action_bar_ready_to_load": "Ready to load your addons preset.",
   "action_bar_addons_loaded": "{count} addons ready. Review and sync to your account.",
-  "skip_to_content": "Skip to setup"
+  "skip_to_content": "Skip to setup",
+  "health_title": "Keys & health",
+  "health_desc": "Check that your debrid and provider keys work, and see when subscriptions expire.",
+  "health_test_all": "Test all",
+  "health_testing": "Testing…",
+  "health_empty": "Add a debrid or advanced API key above to check its health here.",
+  "health_check_one": "Test {service}",
+  "health_status_untested": "Untested",
+  "health_status_checking": "Checking",
+  "health_status_valid": "Valid",
+  "health_status_invalid": "Invalid",
+  "health_status_error": "Error",
+  "health_summary": "{valid} valid · {invalid} invalid · {untested} untested",
+  "health_error_generic": "Could not reach the service"
 }
