@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n';
 import draggable from 'vuedraggable';
 import AddonItem from './AddonItem.vue';
 import DynamicForm from './DynamicForm.vue';
+import ApiHealthPanel from './ApiHealthPanel.vue';
 import {
   QuestionMarkCircleIcon,
   CheckCircleIcon,
@@ -1311,6 +1312,12 @@ watch(
           </div>
         </div>
       </div>
+
+      <!-- Keys & Health: optional validation of the keys entered above -->
+      <ApiHealthPanel
+        :debrid-entries="debridEntries"
+        :advanced="advancedOptions"
+      />
 
       <!-- Load preset (generates the addon list reviewed in the next phase) -->
       <fieldset
